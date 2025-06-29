@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: football-transfers-ingress
+  namespace: football-transfers
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+spec:
+  rules:
+  - host: 64.227.134.87.nip.io  # Using nip.io for external access
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: football-transfers-service
+            port:
+              number: 80 

@@ -165,6 +165,21 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# Docker
+*.tar
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+
+# Kubernetes
+*.yaml.bak
+*.yml.bak
+
+# Temporary files
+*.tmp
+*.temp
+root@
+
 # IDE
 .vscode/
 .idea/
@@ -172,4 +187,14 @@ dmypy.json
 *.swo
 
 # OS
-Thumbs.db 
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Local development
+.env.local
+.env.development
+.env.test
+.env.production 

@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: football-transfers-app
+  namespace: football-transfers
+  labels:
+    app: football-transfers-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: football-transfers-app
+  template:
+    metadata:
+      labels:
+        app: football-transfers-app
+    spec:
+      containers:
+      - name: football-transfers-app
+        image: football-transfers-app:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8000
+        env:
+        - name: PORT
+          value: "8000"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5 
