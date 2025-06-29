@@ -120,16 +120,16 @@ jobs:
     - name: Copy image to droplet
       run: |
         echo "📤 Copying image to droplet..."
-        echo "Using: scp football-transfers-app.tar $DROPLET_USER@$DROPLET_IP:/tmp/"
+        echo "Using: scp football-transfers-app.tar $DROPLET_USER@$DROPLET_IP:~/"
         echo "DROPLET_USER: $DROPLET_USER"
         echo "DROPLET_IP: $DROPLET_IP"
-        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no football-transfers-app.tar $DROPLET_USER@$DROPLET_IP:/tmp/
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no football-transfers-app.tar $DROPLET_USER@$DROPLET_IP:~/
         echo "✅ Image copied successfully"
     
     - name: Copy Kubernetes manifests
       run: |
         echo "📤 Copying Kubernetes manifests..."
-        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -r k8s/ $DROPLET_USER@$DROPLET_IP:/tmp/
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -r k8s/ $DROPLET_USER@$DROPLET_IP:~/
         echo "✅ Manifests copied successfully"
     
     - name: Deploy to k3s
@@ -140,15 +140,15 @@ jobs:
           sudo k3s ctr images rm docker.io/library/football-transfers-app:latest || true
           
           echo "📦 Loading new image into k3s..."
-          sudo k3s ctr images import /tmp/football-transfers-app.tar
+          sudo k3s ctr images import ~/football-transfers-app.tar
           
           echo "🔍 Verifying image is loaded..."
           sudo k3s ctr images ls | grep football-transfers-app
           
           echo "📋 Applying Kubernetes manifests..."
-          sudo kubectl apply -f /tmp/k8s/namespace.yaml
-          sudo kubectl apply -f /tmp/k8s/deployment.yaml
-          sudo kubectl apply -f /tmp/k8s/service.yaml
+          sudo kubectl apply -f ~/k8s/namespace.yaml
+          sudo kubectl apply -f ~/k8s/deployment.yaml
+          sudo kubectl apply -f ~/k8s/service.yaml
           
           echo "🔄 Rolling out deployment..."
           sudo kubectl rollout restart deployment/football-transfers-app -n football-transfers
@@ -190,6 +190,6 @@ jobs:
       run: |
         ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP << 'EOF'
           echo "🧹 Cleaning up temporary files..."
-          rm -f /tmp/football-transfers-app.tar
-          rm -rf /tmp/k8s/
+          rm -f ~/football-transfers-app.tar
+          rm -rf ~/k8s/
         EOF 
