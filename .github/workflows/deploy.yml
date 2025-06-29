@@ -8,7 +8,7 @@ on:
 
 env:
   DROPLET_IP: ${{ secrets.DIGITALOCEAN_HOST }}
-  DROPLET_USER: fastapi
+  DROPLET_USER: root
   SSH_PRIVATE_KEY: ${{ secrets.DIGITALOCEAN_SSH_KEY }}
 
 jobs:
@@ -137,34 +137,32 @@ jobs:
         ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP << 'EOF'
           set -e
           
-          echo "🔧 Using fastapi user with sudo access..."
+          echo "🔧 Using root user for k3s deployment..."
           
           echo "🧹 Cleaning up old image..."
-          sudo k3s ctr images rm docker.io/library/football-transfers-app:latest || true
+          k3s ctr images rm docker.io/library/football-transfers-app:latest || true
           
           echo "📦 Loading new image into k3s..."
-          sudo k3s ctr images import ~/football-transfers-app.tar
+          k3s ctr images import ~/football-transfers-app.tar
           
           echo "🔍 Verifying image is loaded..."
-          sudo k3s ctr images ls | grep football-transfers-app
+          k3s ctr images ls | grep football-transfers-app
           
           echo "📋 Applying Kubernetes manifests..."
-          sudo kubectl apply -f ~/k8s/namespace.yaml
-          sudo kubectl apply -f ~/k8s/deployment.yaml
-          sudo kubectl apply -f ~/k8s/service.yaml
+          kubectl apply -f ~/k8s/namespace.yaml
+          kubectl apply -f ~/k8s/deployment.yaml
+          kubectl apply -f ~/k8s/service.yaml
           
           echo "🔄 Rolling out deployment..."
-          sudo kubectl rollout restart deployment/football-transfers-app -n football-transfers
+          kubectl rollout restart deployment/football-transfers-app -n football-transfers
           
           echo "⏳ Waiting for deployment to be ready..."
-          sudo kubectl rollout status deployment/football-transfers-app -n football-transfers --timeout=300s
+          kubectl rollout status deployment/football-transfers-app -n football-transfers --timeout=300s
+          
+          echo "🔍 Checking pod status..."
+          kubectl get pods -n football-transfers
           
           echo "✅ Deployment completed successfully!"
-          echo "📊 Current pod status:"
-          sudo kubectl get pods -n football-transfers
-          
-          echo "🌐 Service status:"
-          sudo kubectl get svc -n football-transfers
         EOF
     
     - name: Health check
