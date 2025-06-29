@@ -7,9 +7,9 @@ on:
     branches: [ main, master ]
 
 env:
-  DROPLET_IP: ${{ secrets.DROPLET_IP }}
-  DROPLET_USER: root
-  SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+  DROPLET_IP: ${{ secrets.DIGITALOCEAN_HOST }}
+  DROPLET_USER: ${{ secrets.DIGITALOCEAN_USERNAME }}
+  SSH_PRIVATE_KEY: ${{ secrets.DIGITALOCEAN_SSH_KEY }}
 
 jobs:
   test:
