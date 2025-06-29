@@ -87,24 +87,33 @@ jobs:
         echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
         echo "SSH key file created, size: $(wc -c < ~/.ssh/id_rsa) bytes"
+        echo "SSH key file permissions: $(ls -la ~/.ssh/id_rsa)"
+        echo "SSH key first line: $(head -1 ~/.ssh/id_rsa)"
+        echo "SSH key last line: $(tail -1 ~/.ssh/id_rsa)"
         ssh-keyscan -H $DROPLET_IP >> ~/.ssh/known_hosts
         echo "SSH setup complete"
+        
+        echo "🔍 Testing SSH connection..."
+        ssh -i ~/.ssh/id_rsa -o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP "echo 'SSH test successful'" || echo "SSH test failed"
     
     - name: Copy image to droplet
       run: |
         echo "📤 Copying image to droplet..."
-        scp football-transfers-app.tar $DROPLET_USER@$DROPLET_IP:/tmp/
+        echo "Using: scp football-transfers-app.tar $DROPLET_USER@$DROPLET_IP:/tmp/"
+        echo "DROPLET_USER: $DROPLET_USER"
+        echo "DROPLET_IP: $DROPLET_IP"
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no football-transfers-app.tar $DROPLET_USER@$DROPLET_IP:/tmp/
         echo "✅ Image copied successfully"
     
     - name: Copy Kubernetes manifests
       run: |
         echo "📤 Copying Kubernetes manifests..."
-        scp -r k8s/ $DROPLET_USER@$DROPLET_IP:/tmp/
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -r k8s/ $DROPLET_USER@$DROPLET_IP:/tmp/
         echo "✅ Manifests copied successfully"
     
     - name: Deploy to k3s
       run: |
-        ssh $DROPLET_USER@$DROPLET_IP << 'EOF'
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP << 'EOF'
           set -e
           echo "🧹 Cleaning up old image..."
           sudo k3s ctr images rm docker.io/library/football-transfers-app:latest || true
@@ -158,7 +167,7 @@ jobs:
     - name: Cleanup
       if: always()
       run: |
-        ssh $DROPLET_USER@$DROPLET_IP << 'EOF'
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP << 'EOF'
           echo "🧹 Cleaning up temporary files..."
           rm -f /tmp/football-transfers-app.tar
           rm -rf /tmp/k8s/
