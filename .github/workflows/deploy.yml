@@ -137,32 +137,59 @@ jobs:
         ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP << 'EOF'
           set -e
           
+          echo "🔧 Configuring k3s access..."
+          
+          # Check if user is in the right groups
+          if ! groups | grep -q docker; then
+            echo "Adding user to docker group..."
+            sudo usermod -aG docker $USER
+          fi
+          
+          # Check if user is in the right groups for k3s
+          if ! groups | grep -q k3s; then
+            echo "Adding user to k3s group..."
+            sudo usermod -aG k3s $USER
+          fi
+          
+          # Configure passwordless sudo for k3s commands
+          echo "Configuring passwordless sudo for k3s..."
+          if ! sudo -n k3s --version >/dev/null 2>&1; then
+            echo "$USER ALL=(ALL) NOPASSWD: /usr/bin/k3s, /usr/bin/kubectl, /usr/bin/ctr" | sudo tee /etc/sudoers.d/k3s-user
+            echo "✅ Passwordless sudo configured"
+          else
+            echo "✅ User already has passwordless sudo access"
+          fi
+          
+          # Set proper permissions for k3s socket
+          echo "Setting k3s socket permissions..."
+          sudo chmod 666 /run/k3s/containerd/containerd.sock 2>/dev/null || true
+          
           echo "🧹 Cleaning up old image..."
-          k3s ctr images rm docker.io/library/football-transfers-app:latest || true
+          sudo k3s ctr images rm docker.io/library/football-transfers-app:latest || true
           
           echo "📦 Loading new image into k3s..."
-          k3s ctr images import ~/football-transfers-app.tar
+          sudo k3s ctr images import ~/football-transfers-app.tar
           
           echo "🔍 Verifying image is loaded..."
-          k3s ctr images ls | grep football-transfers-app
+          sudo k3s ctr images ls | grep football-transfers-app
           
           echo "📋 Applying Kubernetes manifests..."
-          kubectl apply -f ~/k8s/namespace.yaml
-          kubectl apply -f ~/k8s/deployment.yaml
-          kubectl apply -f ~/k8s/service.yaml
+          sudo kubectl apply -f ~/k8s/namespace.yaml
+          sudo kubectl apply -f ~/k8s/deployment.yaml
+          sudo kubectl apply -f ~/k8s/service.yaml
           
           echo "🔄 Rolling out deployment..."
-          kubectl rollout restart deployment/football-transfers-app -n football-transfers
+          sudo kubectl rollout restart deployment/football-transfers-app -n football-transfers
           
           echo "⏳ Waiting for deployment to be ready..."
-          kubectl rollout status deployment/football-transfers-app -n football-transfers --timeout=300s
+          sudo kubectl rollout status deployment/football-transfers-app -n football-transfers --timeout=300s
           
           echo "✅ Deployment completed successfully!"
           echo "📊 Current pod status:"
-          kubectl get pods -n football-transfers
+          sudo kubectl get pods -n football-transfers
           
           echo "🌐 Service status:"
-          kubectl get svc -n football-transfers
+          sudo kubectl get svc -n football-transfers
         EOF
     
     - name: Health check
