@@ -88,8 +88,29 @@ jobs:
         chmod 600 ~/.ssh/id_rsa
         echo "SSH key file created, size: $(wc -c < ~/.ssh/id_rsa) bytes"
         echo "SSH key file permissions: $(ls -la ~/.ssh/id_rsa)"
+        echo "SSH key file line count: $(wc -l < ~/.ssh/id_rsa)"
         echo "SSH key first line: $(head -1 ~/.ssh/id_rsa)"
         echo "SSH key last line: $(tail -1 ~/.ssh/id_rsa)"
+        echo "SSH key content (first 200 chars): $(head -c 200 ~/.ssh/id_rsa)"
+        echo "SSH key content (last 200 chars): $(tail -c 200 ~/.ssh/id_rsa)"
+        
+        # Check if the key starts with the expected format
+        if grep -q "BEGIN.*PRIVATE KEY" ~/.ssh/id_rsa; then
+          echo "✅ SSH key has correct BEGIN marker"
+        else
+          echo "❌ SSH key missing BEGIN marker"
+          echo "First few lines:"
+          head -5 ~/.ssh/id_rsa
+        fi
+        
+        if grep -q "END.*PRIVATE KEY" ~/.ssh/id_rsa; then
+          echo "✅ SSH key has correct END marker"
+        else
+          echo "❌ SSH key missing END marker"
+          echo "Last few lines:"
+          tail -5 ~/.ssh/id_rsa
+        fi
+        
         ssh-keyscan -H $DROPLET_IP >> ~/.ssh/known_hosts
         echo "SSH setup complete"
         
