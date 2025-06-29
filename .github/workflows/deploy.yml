@@ -137,59 +137,100 @@ jobs:
         ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP << 'EOF'
           set -e
           
-          echo "🔧 Configuring k3s access..."
+          echo "🔧 Checking k3s access..."
           
-          # Check if user is in the right groups
-          if ! groups | grep -q docker; then
-            echo "Adding user to docker group..."
-            sudo usermod -aG docker $USER
-          fi
-          
-          # Check if user is in the right groups for k3s
-          if ! groups | grep -q k3s; then
-            echo "Adding user to k3s group..."
-            sudo usermod -aG k3s $USER
-          fi
-          
-          # Configure passwordless sudo for k3s commands
-          echo "Configuring passwordless sudo for k3s..."
-          if ! sudo -n k3s --version >/dev/null 2>&1; then
+          # Check if user already has passwordless sudo
+          if sudo -n true 2>/dev/null; then
+            echo "✅ User has passwordless sudo access"
+            
+            # Add user to groups if needed
+            if ! groups | grep -q docker; then
+              echo "Adding user to docker group..."
+              sudo usermod -aG docker $USER
+            fi
+            
+            if ! groups | grep -q k3s; then
+              echo "Adding user to k3s group..."
+              sudo usermod -aG k3s $USER
+            fi
+            
+            # Configure passwordless sudo for k3s commands
+            echo "Configuring passwordless sudo for k3s..."
             echo "$USER ALL=(ALL) NOPASSWD: /usr/bin/k3s, /usr/bin/kubectl, /usr/bin/ctr" | sudo tee /etc/sudoers.d/k3s-user
             echo "✅ Passwordless sudo configured"
+            
+            # Set proper permissions for k3s socket
+            echo "Setting k3s socket permissions..."
+            sudo chmod 666 /run/k3s/containerd/containerd.sock 2>/dev/null || true
+            
           else
-            echo "✅ User already has passwordless sudo access"
+            echo "⚠️ User doesn't have passwordless sudo access"
+            echo "Trying to use k3s without sudo..."
+            
+            # Try to use k3s directly without sudo
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
           fi
           
-          # Set proper permissions for k3s socket
-          echo "Setting k3s socket permissions..."
-          sudo chmod 666 /run/k3s/containerd/containerd.sock 2>/dev/null || true
-          
           echo "🧹 Cleaning up old image..."
-          sudo k3s ctr images rm docker.io/library/football-transfers-app:latest || true
+          if sudo -n true 2>/dev/null; then
+            sudo k3s ctr images rm docker.io/library/football-transfers-app:latest || true
+          else
+            k3s ctr images rm docker.io/library/football-transfers-app:latest || true
+          fi
           
           echo "📦 Loading new image into k3s..."
-          sudo k3s ctr images import ~/football-transfers-app.tar
+          if sudo -n true 2>/dev/null; then
+            sudo k3s ctr images import ~/football-transfers-app.tar
+          else
+            k3s ctr images import ~/football-transfers-app.tar
+          fi
           
           echo "🔍 Verifying image is loaded..."
-          sudo k3s ctr images ls | grep football-transfers-app
+          if sudo -n true 2>/dev/null; then
+            sudo k3s ctr images ls | grep football-transfers-app
+          else
+            k3s ctr images ls | grep football-transfers-app
+          fi
           
           echo "📋 Applying Kubernetes manifests..."
-          sudo kubectl apply -f ~/k8s/namespace.yaml
-          sudo kubectl apply -f ~/k8s/deployment.yaml
-          sudo kubectl apply -f ~/k8s/service.yaml
+          if sudo -n true 2>/dev/null; then
+            sudo kubectl apply -f ~/k8s/namespace.yaml
+            sudo kubectl apply -f ~/k8s/deployment.yaml
+            sudo kubectl apply -f ~/k8s/service.yaml
+          else
+            kubectl apply -f ~/k8s/namespace.yaml
+            kubectl apply -f ~/k8s/deployment.yaml
+            kubectl apply -f ~/k8s/service.yaml
+          fi
           
           echo "🔄 Rolling out deployment..."
-          sudo kubectl rollout restart deployment/football-transfers-app -n football-transfers
+          if sudo -n true 2>/dev/null; then
+            sudo kubectl rollout restart deployment/football-transfers-app -n football-transfers
+          else
+            kubectl rollout restart deployment/football-transfers-app -n football-transfers
+          fi
           
           echo "⏳ Waiting for deployment to be ready..."
-          sudo kubectl rollout status deployment/football-transfers-app -n football-transfers --timeout=300s
+          if sudo -n true 2>/dev/null; then
+            sudo kubectl rollout status deployment/football-transfers-app -n football-transfers --timeout=300s
+          else
+            kubectl rollout status deployment/football-transfers-app -n football-transfers --timeout=300s
+          fi
           
           echo "✅ Deployment completed successfully!"
           echo "📊 Current pod status:"
-          sudo kubectl get pods -n football-transfers
+          if sudo -n true 2>/dev/null; then
+            sudo kubectl get pods -n football-transfers
+          else
+            kubectl get pods -n football-transfers
+          fi
           
           echo "🌐 Service status:"
-          sudo kubectl get svc -n football-transfers
+          if sudo -n true 2>/dev/null; then
+            sudo kubectl get svc -n football-transfers
+          else
+            kubectl get svc -n football-transfers
+          fi
         EOF
     
     - name: Health check
