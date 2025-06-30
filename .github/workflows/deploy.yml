@@ -36,7 +36,7 @@ jobs:
     - name: Test Docker build
       run: |
         echo "Testing Docker build..."
-        docker build --platform linux/amd64 -t football-transfers-app:test .
+        docker build --platform linux/amd64 -t mybriefings-feed-service:test .
         echo "✅ Docker build test passed"
 
   build-and-deploy:
@@ -73,12 +73,12 @@ jobs:
     
     - name: Build Docker image for x86_64
       run: |
-        docker build --platform linux/amd64 -t football-transfers-app:latest .
+        docker build --platform linux/amd64 -t mybriefings-feed-service:latest .
     
     - name: Save Docker image
       run: |
-        docker save football-transfers-app:latest -o football-transfers-app.tar
-        ls -la football-transfers-app.tar
+        docker save mybriefings-feed-service:latest -o mybriefings-feed-service.tar
+        ls -la mybriefings-feed-service.tar
     
     - name: Setup SSH
       run: |
@@ -120,10 +120,10 @@ jobs:
     - name: Copy image to droplet
       run: |
         echo "📤 Copying image to droplet..."
-        echo "Using: scp football-transfers-app.tar $DROPLET_USER@$DROPLET_IP:~/"
+        echo "Using: scp mybriefings-feed-service.tar $DROPLET_USER@$DROPLET_IP:~/"
         echo "DROPLET_USER: $DROPLET_USER"
         echo "DROPLET_IP: $DROPLET_IP"
-        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no football-transfers-app.tar $DROPLET_USER@$DROPLET_IP:~/
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no mybriefings-feed-service.tar $DROPLET_USER@$DROPLET_IP:~/
         echo "✅ Image copied successfully"
     
     - name: Copy Kubernetes manifests
@@ -140,13 +140,13 @@ jobs:
           echo "🔧 Using root user for k3s deployment..."
           
           echo "🧹 Cleaning up old image..."
-          k3s ctr images rm docker.io/library/football-transfers-app:latest || true
+          k3s ctr images rm docker.io/library/mybriefings-feed-service:latest || true
           
           echo "📦 Loading new image into k3s..."
-          k3s ctr images import ~/football-transfers-app.tar
+          k3s ctr images import ~/mybriefings-feed-service.tar
           
           echo "🔍 Verifying image is loaded..."
-          k3s ctr images ls | grep football-transfers-app
+          k3s ctr images ls | grep mybriefings-feed-service
           
           echo "📋 Applying Kubernetes manifests..."
           kubectl apply -f ~/k8s/namespace.yaml
@@ -154,10 +154,10 @@ jobs:
           kubectl apply -f ~/k8s/service.yaml
           
           echo "🔄 Rolling out deployment..."
-          kubectl rollout restart deployment/football-transfers-app -n football-transfers
+          kubectl rollout restart deployment/mybriefings-feed-service -n football-transfers
           
           echo "⏳ Waiting for deployment to be ready..."
-          kubectl rollout status deployment/football-transfers-app -n football-transfers --timeout=300s
+          kubectl rollout status deployment/mybriefings-feed-service -n football-transfers --timeout=300s
           
           echo "🔍 Checking pod status..."
           kubectl get pods -n football-transfers
@@ -172,7 +172,7 @@ jobs:
         
         # Test the health endpoint
         for i in {1..10}; do
-          if curl -f http://$DROPLET_IP:30080/health; then
+          if curl -f http://$DROPLET_IP:30100/health; then
             echo "✅ Health check passed!"
             break
           else
@@ -184,7 +184,7 @@ jobs:
     - name: Run integration tests
       run: |
         echo "Running integration tests..."
-        python test_app.py http://$DROPLET_IP:30080
+        python test_app.py http://$DROPLET_IP:30100
     
     - name: Copy cleanup script
       if: always()
