@@ -154,10 +154,10 @@ jobs:
           kubectl apply -f ~/k8s/service.yaml
           
           echo "🔄 Rolling out deployment..."
-          kubectl rollout restart deployment/mybriefings-feed-service -n football-transfers
+          kubectl rollout restart deployment/my-briefings-app -n football-transfers
           
           echo "⏳ Waiting for deployment to be ready..."
-          kubectl rollout status deployment/mybriefings-feed-service -n football-transfers --timeout=300s
+          kubectl rollout status deployment/my-briefings-app -n football-transfers --timeout=300s
           
           echo "🔍 Checking pod status..."
           kubectl get pods -n football-transfers
