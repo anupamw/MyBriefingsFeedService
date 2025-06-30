@@ -1,23 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: football-transfers-app
-  namespace: football-transfers
+  name: my-briefings-app
+  namespace: my-briefings
   labels:
-    app: football-transfers-app
+    app: my-briefings-app
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: football-transfers-app
+      app: my-briefings-app
   template:
     metadata:
       labels:
-        app: football-transfers-app
+        app: my-briefings-app
     spec:
       containers:
-      - name: football-transfers-app
-        image: football-transfers-app:latest
+      - name: my-briefings-app
+        image: my-briefings-app:latest
         imagePullPolicy: Never
         ports:
         - containerPort: 8000

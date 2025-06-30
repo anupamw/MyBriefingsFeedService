@@ -35,37 +35,37 @@ fi
 
 # Create application directory
 echo "📁 Creating application directory..."
-sudo mkdir -p /var/www/football-transfers-app
-sudo chown $USER:$USER /var/www/football-transfers-app
+sudo mkdir -p /var/www/my-briefings-app
+sudo chown $USER:$USER /var/www/my-briefings-app
 
 # Clone repository (if not already done)
-if [ ! -d "/var/www/football-transfers-app/.git" ]; then
+if [ ! -d "/var/www/my-briefings-app/.git" ]; then
     echo "📥 Cloning repository..."
-    cd /var/www/football-transfers-app
+    cd /var/www/my-briefings-app
     git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git .
 else
     echo "📥 Repository already exists, pulling latest changes..."
-    cd /var/www/football-transfers-app
+    cd /var/www/my-briefings-app
     git pull origin main
 fi
 
 # Build and run Docker container
 echo "🐳 Building Docker image..."
-docker build -t football-transfers-app:latest .
+docker build -t my-briefings-app:latest .
 
 # Stop existing container if running
 echo "🛑 Stopping existing container..."
-docker stop football-transfers-app || true
-docker rm football-transfers-app || true
+docker stop my-briefings-app || true
+docker rm my-briefings-app || true
 
 # Run new container
 echo "🚀 Starting Docker container..."
 docker run -d \
-    --name football-transfers-app \
+    --name my-briefings-app \
     --restart unless-stopped \
     -p 8000:8000 \
     -e PYTHONPATH=/app \
-    football-transfers-app:latest
+    my-briefings-app:latest
 
 # Wait for container to be ready
 echo "⏳ Waiting for container to be ready..."
@@ -73,7 +73,7 @@ sleep 10
 
 # Check container status
 echo "🔍 Checking container status..."
-docker ps | grep football-transfers-app
+docker ps | grep my-briefings-app
 
 # Test the application
 echo "🧪 Testing application..."
@@ -82,8 +82,8 @@ if curl -f http://localhost:8000/health; then
     echo "🌐 Your FastAPI app is available at: http://$(curl -s ifconfig.me):8000"
     echo "📚 API documentation: http://$(curl -s ifconfig.me):8000/docs"
 else
-    echo "❌ Application failed to start. Check logs with: docker logs football-transfers-app"
-    docker logs football-transfers-app
+    echo "❌ Application failed to start. Check logs with: docker logs my-briefings-app"
+    docker logs my-briefings-app
     exit 1
 fi
 
@@ -96,8 +96,8 @@ echo "🎉 Docker deployment completed successfully!"
 # Show useful commands
 echo ""
 echo "📋 Useful commands:"
-echo "  View logs: docker logs football-transfers-app"
-echo "  Restart: docker restart football-transfers-app"
-echo "  Stop: docker stop football-transfers-app"
-echo "  Remove: docker rm football-transfers-app"
-echo "  Shell access: docker exec -it football-transfers-app /bin/bash" 
+echo "  View logs: docker logs my-briefings-app"
+echo "  Restart: docker restart my-briefings-app"
+echo "  Stop: docker stop my-briefings-app"
+echo "  Remove: docker rm my-briefings-app"
+echo "  Shell access: docker exec -it my-briefings-app /bin/bash" 

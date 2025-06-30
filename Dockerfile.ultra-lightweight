@@ -1,4 +1,4 @@
-# Ultra-lightweight Dockerfile for Football Transfers App
+# Ultra-lightweight Dockerfile for My Briefings App
 # Multi-stage build to minimize final image size
 
 # Build stage

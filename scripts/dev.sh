@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Development script for Football Transfers Feed Service
+# Development script for MyBriefingsFeedService
 # This script helps with local development using Docker
 
 set -e
 
-echo "🚀 Football Transfers Feed Service - Development Script"
+echo "🚀 MyBriefingsFeedService - Development Script"
 
 # Function to show usage
 show_usage() {
@@ -26,7 +26,7 @@ show_usage() {
 # Function to build image
 build() {
     echo "🔨 Building Docker image..."
-    docker build -t football-transfers-app:latest .
+    docker build -t my-briefings-app:latest .
     echo "✅ Build completed!"
 }
 
@@ -34,9 +34,9 @@ build() {
 run() {
     echo "🚀 Running container..."
     docker run -d \
-        --name football-transfers-app \
+        --name my-briefings-app \
         -p 8000:8000 \
-        football-transfers-app:latest
+        my-briefings-app:latest
     echo "✅ Container started! App available at http://localhost:8000"
 }
 
@@ -57,20 +57,20 @@ down() {
 # Function to view logs
 logs() {
     echo "📋 Viewing logs..."
-    docker logs -f football-transfers-app
+    docker logs -f my-briefings-app
 }
 
 # Function to access shell
 shell() {
     echo "🐚 Accessing container shell..."
-    docker exec -it football-transfers-app /bin/bash
+    docker exec -it my-briefings-app /bin/bash
 }
 
 # Function to clean up
 clean() {
     echo "🧹 Cleaning up..."
-    docker stop football-transfers-app 2>/dev/null || true
-    docker rm football-transfers-app 2>/dev/null || true
+    docker stop my-briefings-app 2>/dev/null || true
+    docker rm my-briefings-app 2>/dev/null || true
     docker image prune -f
     echo "✅ Cleanup completed!"
 }
@@ -78,7 +78,7 @@ clean() {
 # Function to run tests
 test() {
     echo "🧪 Running tests..."
-    docker run --rm football-transfers-app:latest python -c "
+    docker run --rm my-briefings-app:latest python -c "
 import fastapi
 import uvicorn
 from main import app

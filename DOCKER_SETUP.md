@@ -48,7 +48,7 @@ chmod +x deploy-docker.sh
 ## 📁 File Structure
 
 ```
-FootballTransfersFeedService/
+MyBriefingsFeedService/
 ├── Dockerfile                 # Main Docker configuration
 ├── .dockerignore             # Files to exclude from build
 ├── docker-compose.yml        # Development compose

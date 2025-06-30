@@ -1,8 +1,8 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: football-transfers-ingress
-  namespace: football-transfers
+  name: my-briefings-ingress
+  namespace: my-briefings
   annotations:
     kubernetes.io/ingress.class: "traefik"
 spec:
@@ -14,6 +14,6 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: football-transfers-service
+            name: my-briefings-service
             port:
               number: 80 

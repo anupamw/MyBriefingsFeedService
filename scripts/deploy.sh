@@ -9,6 +9,7 @@ set -e
 DROPLET_IP="${DROPLET_IP:-64.227.134.87}"  # Replace with your droplet IP
 DROPLET_USER="root"
 SSH_KEY_PATH="${SSH_KEY_PATH:-~/.ssh/id_rsa}"  # Path to your SSH key
+IMAGE_NAME="my-briefings-app"
 
 echo "🚀 Starting local deployment to k3s..."
 
@@ -56,17 +57,17 @@ check_requirements() {
 # Build Docker image
 build_image() {
     print_status "Building Docker image for x86_64..."
-    docker build --platform linux/amd64 -t football-transfers-app:latest .
+    docker build --platform linux/amd64 -t my-briefings-app:latest .
     
     print_status "Saving Docker image..."
-    docker save football-transfers-app:latest -o football-transfers-app.tar
-    ls -la football-transfers-app.tar
+    docker save my-briefings-app:latest -o my-briefings-app.tar
+    ls -la my-briefings-app.tar
 }
 
 # Deploy to droplet
 deploy_to_droplet() {
     print_status "Copying image to droplet..."
-    scp -i "$SSH_KEY_PATH" football-transfers-app.tar $DROPLET_USER@$DROPLET_IP:/tmp/
+    scp -i "$SSH_KEY_PATH" my-briefings-app.tar $DROPLET_USER@$DROPLET_IP:/tmp/
     
     print_status "Copying Kubernetes manifests..."
     scp -i "$SSH_KEY_PATH" -r k8s/ $DROPLET_USER@$DROPLET_IP:/tmp/
@@ -75,13 +76,13 @@ deploy_to_droplet() {
     ssh -i "$SSH_KEY_PATH" $DROPLET_USER@$DROPLET_IP << 'EOF'
         set -e
         echo "🧹 Cleaning up old image..."
-        sudo k3s ctr images rm docker.io/library/football-transfers-app:latest || true
+        sudo k3s ctr images rm docker.io/library/my-briefings-app:latest || true
         
         echo "📦 Loading new image into k3s..."
-        sudo k3s ctr images import /tmp/football-transfers-app.tar
+        sudo k3s ctr images import /tmp/my-briefings-app.tar
         
         echo "🔍 Verifying image is loaded..."
-        sudo k3s ctr images ls | grep football-transfers-app
+        sudo k3s ctr images ls | grep my-briefings-app
         
         echo "📋 Applying Kubernetes manifests..."
         sudo kubectl apply -f /tmp/k8s/namespace.yaml
@@ -89,17 +90,17 @@ deploy_to_droplet() {
         sudo kubectl apply -f /tmp/k8s/service.yaml
         
         echo "🔄 Rolling out deployment..."
-        sudo kubectl rollout restart deployment/football-transfers-app -n football-transfers
+        sudo kubectl rollout restart deployment/my-briefings-app -n my-briefings
         
         echo "⏳ Waiting for deployment to be ready..."
-        sudo kubectl rollout status deployment/football-transfers-app -n football-transfers --timeout=300s
+        sudo kubectl rollout status deployment/my-briefings-app -n my-briefings --timeout=300s
         
         echo "✅ Deployment completed successfully!"
         echo "📊 Current pod status:"
-        sudo kubectl get pods -n football-transfers
+        sudo kubectl get pods -n my-briefings
         
         echo "🌐 Service status:"
-        sudo kubectl get svc -n football-transfers
+        sudo kubectl get svc -n my-briefings
 EOF
 }
 
@@ -131,11 +132,11 @@ cleanup() {
     print_status "Cleaning up..."
     ssh -i "$SSH_KEY_PATH" $DROPLET_USER@$DROPLET_IP << 'EOF'
         echo "🧹 Cleaning up temporary files..."
-        rm -f /tmp/football-transfers-app.tar
+        rm -f /tmp/my-briefings-app.tar
         rm -rf /tmp/k8s/
 EOF
     
-    rm -f football-transfers-app.tar
+    rm -f my-briefings-app.tar
 }
 
 # Main execution

@@ -25,7 +25,7 @@ A FastAPI-based web application for football transfer news and feeds, containeri
 2. **Clone the repository**:
 ```bash
 git clone <your-repo-url>
-cd FootballTransfersFeedService
+cd MyBriefingsFeedService
 ```
 
 3. **Run with Docker Compose**:

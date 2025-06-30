@@ -1,16 +1,16 @@
 #!/bin/bash
 
-# Football Transfers App Kubernetes Deployment Script (Local Image)
+# My Briefings App Kubernetes Deployment Script (Local Image)
 # This script loads the image directly into k3s without needing a registry
 
 set -e
 
-echo "🚀 Starting Football Transfers App Kubernetes Deployment (Local Image)..."
+echo "🚀 Starting My Briefings App Kubernetes Deployment (Local Image)..."
 
 # Configuration
-IMAGE_NAME="football-transfers-app"
+IMAGE_NAME="my-briefings-app"
 TAG="latest"
-IMAGE_TAR="football-transfers-app.tar"
+IMAGE_TAR="my-briefings-app.tar"
 
 echo "📦 Building Docker image..."
 docker build -t $IMAGE_NAME:$TAG .
@@ -28,17 +28,17 @@ kubectl apply -f k8s/deployment.yaml
 kubectl apply -f k8s/service.yaml
 
 echo "⏳ Waiting for deployment to be ready..."
-kubectl wait --for=condition=available --timeout=300s deployment/football-transfers-app -n football-transfers
+kubectl wait --for=condition=available --timeout=300s deployment/my-briefings-app -n my-briefings
 
 echo "🔍 Checking deployment status..."
-kubectl get pods -n football-transfers
-kubectl get svc -n football-transfers
+kubectl get pods -n my-briefings
+kubectl get svc -n my-briefings
 
 echo "🌐 Getting service information..."
-NODEPORT=$(kubectl get svc football-transfers-service -n football-transfers -o jsonpath='{.spec.ports[0].nodePort}')
+NODEPORT=$(kubectl get svc my-briefings-service -n my-briefings -o jsonpath='{.spec.ports[0].nodePort}')
 echo "Your app is accessible at: http://YOUR_DROPLET_IP:$NODEPORT"
 echo "Health check: http://YOUR_DROPLET_IP:$NODEPORT/health"
 
 echo "✅ Deployment complete!"
-echo "📊 To monitor logs: kubectl logs -f deployment/football-transfers-app -n football-transfers"
-echo "🔧 To scale: kubectl scale deployment football-transfers-app --replicas=2 -n football-transfers" 
+echo "📊 To monitor logs: kubectl logs -f deployment/my-briefings-app -n my-briefings"
+echo "🔧 To scale: kubectl scale deployment my-briefings-app --replicas=2 -n my-briefings" 

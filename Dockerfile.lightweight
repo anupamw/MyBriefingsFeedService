@@ -1,4 +1,4 @@
-# Lightweight Dockerfile for Football Transfers App
+# Lightweight Dockerfile for My Briefings App
 FROM python:3.11-alpine
 
 # Set working directory
