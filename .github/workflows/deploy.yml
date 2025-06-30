@@ -186,11 +186,12 @@ jobs:
         echo "Running integration tests..."
         python test_app.py http://$DROPLET_IP:30080
     
+    - name: Copy cleanup script
+      if: always()
+      run: |
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no scripts/cleanup-remote.sh $DROPLET_USER@$DROPLET_IP:~/
+
     - name: Cleanup
       if: always()
       run: |
-        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP << 'EOF'
-          echo "🧹 Cleaning up temporary files..."
-          rm -f ~/football-transfers-app.tar
-          rm -rf ~/k8s/
-        EOF 
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP 'bash ~/cleanup-remote.sh && rm -f ~/cleanup-remote.sh' 
