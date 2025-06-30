@@ -36,7 +36,7 @@ jobs:
     - name: Test Docker build
       run: |
         echo "Testing Docker build..."
-        docker build --platform linux/amd64 -t mybriefings-feed-service:test .
+        docker build --platform linux/amd64 -t my-briefings-app:test .
         echo "✅ Docker build test passed"
 
   build-and-deploy:
@@ -73,12 +73,12 @@ jobs:
     
     - name: Build Docker image for x86_64
       run: |
-        docker build --platform linux/amd64 -t mybriefings-feed-service:latest .
+        docker build --platform linux/amd64 -t my-briefings-app:latest .
     
     - name: Save Docker image
       run: |
-        docker save mybriefings-feed-service:latest -o mybriefings-feed-service.tar
-        ls -la mybriefings-feed-service.tar
+        docker save my-briefings-app:latest -o my-briefings-app.tar
+        ls -la my-briefings-app.tar
     
     - name: Setup SSH
       run: |
@@ -120,10 +120,10 @@ jobs:
     - name: Copy image to droplet
       run: |
         echo "📤 Copying image to droplet..."
-        echo "Using: scp mybriefings-feed-service.tar $DROPLET_USER@$DROPLET_IP:~/"
+        echo "Using: scp my-briefings-app.tar $DROPLET_USER@$DROPLET_IP:~/"
         echo "DROPLET_USER: $DROPLET_USER"
         echo "DROPLET_IP: $DROPLET_IP"
-        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no mybriefings-feed-service.tar $DROPLET_USER@$DROPLET_IP:~/
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no my-briefings-app.tar $DROPLET_USER@$DROPLET_IP:~/
         echo "✅ Image copied successfully"
     
     - name: Copy Kubernetes manifests
@@ -140,13 +140,13 @@ jobs:
           echo "🔧 Using root user for k3s deployment..."
           
           echo "🧹 Cleaning up old image..."
-          k3s ctr images rm docker.io/library/mybriefings-feed-service:latest || true
+          k3s ctr images rm docker.io/library/my-briefings-app:latest || true
           
           echo "📦 Loading new image into k3s..."
-          k3s ctr images import ~/mybriefings-feed-service.tar
+          k3s ctr images import ~/my-briefings-app.tar
           
           echo "🔍 Verifying image is loaded..."
-          k3s ctr images ls | grep mybriefings-feed-service
+          k3s ctr images ls | grep my-briefings-app
           
           echo "📋 Applying Kubernetes manifests..."
           kubectl apply -f ~/k8s/namespace.yaml
