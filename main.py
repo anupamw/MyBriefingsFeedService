@@ -32,7 +32,7 @@ item_id_counter = 1
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to the super amazing fantastical FastAPI Web App!", "status": "running"}
+    return {"message": "Welcome to the amazing fantastical FastAPI Web App!", "status": "running"}
 
 @app.get("/health")
 async def health_check():
