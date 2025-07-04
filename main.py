@@ -12,7 +12,7 @@ from jwt import PyJWTError
 from passlib.context import CryptContext
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 import time
@@ -75,6 +75,19 @@ class FeedItemDB(Base):
     source = Column(String(100))
     published_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class UserCategoryDB(Base):
+    __tablename__ = "user_categories"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False)
+    category_name = Column(String(140), nullable=False)  # Limited to 140 characters
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    __table_args__ = (
+        # Ensure unique combination of user_id and category_name
+        UniqueConstraint('user_id', 'category_name', name='unique_user_category'),
+    )
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -184,6 +197,15 @@ class FeedItem(BaseModel):
     source: Optional[str] = None
     published_at: Optional[str] = None
     created_at: Optional[str] = None
+
+class UserCategory(BaseModel):
+    id: int
+    user_id: int
+    category_name: str
+    created_at: Optional[str] = None
+
+class UserCategoryCreate(BaseModel):
+    category_name: str
 
 # Authentication functions
 def verify_password(plain_password, hashed_password):
@@ -357,8 +379,82 @@ async def root():
             
             .feed-container {
                 display: none;
-                max-width: 800px;
+                max-width: 1200px;
                 width: 100%;
+            }
+            
+            .main-content {
+                display: flex;
+                gap: 30px;
+                margin-top: 20px;
+            }
+            
+            .sidebar {
+                background: white;
+                border-radius: 15px;
+                padding: 25px;
+                box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+                width: 300px;
+                flex-shrink: 0;
+            }
+            
+            .sidebar h3 {
+                margin-bottom: 20px;
+                color: #333;
+                font-size: 1.2em;
+            }
+            
+            .category-item {
+                background: #f8f9fa;
+                border-radius: 8px;
+                padding: 12px;
+                margin-bottom: 10px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            
+            .category-name {
+                font-weight: 500;
+                color: #333;
+            }
+            
+            .delete-category {
+                background: #ff4757;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 12px;
+                cursor: pointer;
+            }
+            
+            .add-category {
+                margin-top: 20px;
+            }
+            
+            .add-category input {
+                width: 100%;
+                padding: 8px;
+                border: 2px solid #e1e5e9;
+                border-radius: 6px;
+                margin-bottom: 10px;
+                font-size: 14px;
+            }
+            
+            .add-category button {
+                width: 100%;
+                padding: 8px;
+                background: #667eea;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-size: 14px;
+                cursor: pointer;
+            }
+            
+            .feed-content {
+                flex: 1;
             }
             
             .feed-header {
@@ -466,7 +562,21 @@ async def root():
                 <p>Here are your personalized news briefings</p>
                 <button class="logout-btn" onclick="logout()">Logout</button>
             </div>
-            <div id="feed-items"></div>
+            
+            <div class="main-content">
+                <div class="sidebar">
+                    <h3>Your Categories</h3>
+                    <div id="categories-list"></div>
+                    <div class="add-category">
+                        <input type="text" id="new-category" placeholder="Enter category name (max 140 chars)" maxlength="140">
+                        <button onclick="addCategory()">Add Category</button>
+                    </div>
+                </div>
+                
+                <div class="feed-content">
+                    <div id="feed-items"></div>
+                </div>
+            </div>
         </div>
         
         <script>
@@ -549,6 +659,7 @@ async def root():
                     if (response.ok) {
                         const feedItems = await response.json();
                         displayFeed(feedItems);
+                        loadCategories();
                         document.getElementById('auth-container').style.display = 'none';
                         document.getElementById('feed-container').style.display = 'block';
                     } else {
@@ -557,6 +668,108 @@ async def root():
                     }
                 } catch (error) {
                     showError('Failed to load feed.');
+                }
+            }
+            
+            async function loadCategories() {
+                const token = localStorage.getItem('token');
+                if (!token) return;
+                
+                try {
+                    const response = await fetch('/user/categories', {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const categories = await response.json();
+                        displayCategories(categories);
+                    }
+                } catch (error) {
+                    console.error('Failed to load categories:', error);
+                }
+            }
+            
+            function displayCategories(categories) {
+                const container = document.getElementById('categories-list');
+                container.innerHTML = '';
+                
+                if (categories.length === 0) {
+                    container.innerHTML = '<p style="color: #666; font-style: italic;">No categories yet. Add your first category below!</p>';
+                    return;
+                }
+                
+                categories.forEach(category => {
+                    const categoryDiv = document.createElement('div');
+                    categoryDiv.className = 'category-item';
+                    categoryDiv.innerHTML = `
+                        <span class="category-name">${category.category_name}</span>
+                        <button class="delete-category" onclick="deleteCategory(${category.id})">×</button>
+                    `;
+                    container.appendChild(categoryDiv);
+                });
+            }
+            
+            async function addCategory() {
+                const token = localStorage.getItem('token');
+                if (!token) return;
+                
+                const categoryName = document.getElementById('new-category').value.trim();
+                if (!categoryName) {
+                    showError('Please enter a category name.');
+                    return;
+                }
+                
+                try {
+                    const response = await fetch('/user/categories', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ category_name: categoryName })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        document.getElementById('new-category').value = '';
+                        loadCategories();
+                        showSuccess('Category added successfully!');
+                    } else {
+                        showError(data.detail);
+                    }
+                } catch (error) {
+                    showError('Failed to add category.');
+                }
+            }
+            
+            async function deleteCategory(categoryId) {
+                const token = localStorage.getItem('token');
+                if (!token) return;
+                
+                if (!confirm('Are you sure you want to delete this category?')) {
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(`/user/categories/${categoryId}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        loadCategories();
+                        showSuccess('Category deleted successfully!');
+                    } else {
+                        const data = await response.json();
+                        showError(data.detail);
+                    }
+                } catch (error) {
+                    showError('Failed to delete category.');
                 }
             }
             
@@ -730,6 +943,98 @@ async def get_feed_item(item_id: int, current_user: dict = Depends(get_current_u
         published_at=item.published_at.isoformat() if item.published_at else None,
         created_at=item.created_at.isoformat() if item.created_at else None
     )
+
+# User Categories endpoints
+@app.get("/user/categories", response_model=List[UserCategory])
+async def get_user_categories(current_user: dict = Depends(get_current_user)):
+    """Get all categories for the current user"""
+    db = SessionLocal()
+    
+    categories = db.query(UserCategoryDB).filter(
+        UserCategoryDB.user_id == current_user["id"]
+    ).order_by(UserCategoryDB.created_at.desc()).all()
+    
+    result = []
+    for category in categories:
+        result.append(UserCategory(
+            id=category.id,
+            user_id=category.user_id,
+            category_name=category.category_name,
+            created_at=category.created_at.isoformat() if category.created_at else None
+        ))
+    
+    db.close()
+    return result
+
+@app.post("/user/categories", response_model=UserCategory)
+async def create_user_category(
+    category: UserCategoryCreate, 
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a new category for the current user (max 5 categories)"""
+    db = SessionLocal()
+    
+    # Check if user already has 5 categories
+    existing_count = db.query(UserCategoryDB).filter(
+        UserCategoryDB.user_id == current_user["id"]
+    ).count()
+    
+    if existing_count >= 5:
+        db.close()
+        raise HTTPException(status_code=400, detail="Maximum of 5 categories allowed per user")
+    
+    # Check if category name already exists for this user
+    existing_category = db.query(UserCategoryDB).filter(
+        UserCategoryDB.user_id == current_user["id"],
+        UserCategoryDB.category_name == category.category_name
+    ).first()
+    
+    if existing_category:
+        db.close()
+        raise HTTPException(status_code=400, detail="Category already exists")
+    
+    # Validate category name length
+    if len(category.category_name) > 140:
+        db.close()
+        raise HTTPException(status_code=400, detail="Category name must be 140 characters or less")
+    
+    # Create new category
+    db_category = UserCategoryDB(
+        user_id=current_user["id"],
+        category_name=category.category_name
+    )
+    
+    db.add(db_category)
+    db.commit()
+    db.refresh(db_category)
+    db.close()
+    
+    return UserCategory(
+        id=db_category.id,
+        user_id=db_category.user_id,
+        category_name=db_category.category_name,
+        created_at=db_category.created_at.isoformat() if db_category.created_at else None
+    )
+
+@app.delete("/user/categories/{category_id}")
+async def delete_user_category(category_id: int, current_user: dict = Depends(get_current_user)):
+    """Delete a category for the current user"""
+    db = SessionLocal()
+    
+    category = db.query(UserCategoryDB).filter(
+        UserCategoryDB.id == category_id,
+        UserCategoryDB.user_id == current_user["id"]
+    ).first()
+    
+    if not category:
+        db.close()
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    db.delete(category)
+    db.commit()
+    db.close()
+    
+    return {"message": "Category deleted successfully"}
 
 # Legacy endpoints (keeping for backward compatibility)
 @app.get("/items", response_model=List[Item])
