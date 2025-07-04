@@ -139,6 +139,21 @@ jobs:
           
           echo "🔧 Using root user for k3s deployment..."
           
+          echo "🐘 Ensuring PostgreSQL is running..."
+          if ! docker ps | grep -q postgres; then
+            echo "Starting PostgreSQL container..."
+            docker run -d \
+              --name postgres \
+              -e POSTGRES_DB=briefings_feed \
+              -e POSTGRES_USER=fastapi \
+              -e POSTGRES_PASSWORD=password \
+              -p 5432:5432 \
+              -v postgres_data:/var/lib/postgresql/data \
+              postgres:15
+          else
+            echo "PostgreSQL is already running"
+          fi
+          
           echo "🧹 Cleaning up old image..."
           k3s ctr images rm docker.io/library/my-briefings-app:latest || true
           

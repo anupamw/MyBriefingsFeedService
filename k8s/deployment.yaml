@@ -24,9 +24,10 @@ spec:
         env:
         - name: PORT
           value: "8000"
-        volumeMounts:
-        - name: data-volume
-          mountPath: /app/data
+        - name: DATABASE_URL
+          value: "postgresql://fastapi:password@10.0.0.1:5432/briefings_feed"
+        - name: SECRET_KEY
+          value: "your-super-secret-key-change-this-in-production"
         resources:
           requests:
             memory: "128Mi"
@@ -45,7 +46,4 @@ spec:
             path: /health
             port: 8000
           initialDelaySeconds: 5
-          periodSeconds: 5
-      volumes:
-      - name: data-volume
-        emptyDir: {} 
+          periodSeconds: 5 

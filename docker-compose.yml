@@ -7,8 +7,12 @@ services:
       - "8000:8000"
     environment:
       - PYTHONPATH=/app
+      - DATABASE_URL=postgresql://fastapi:password@postgres:5432/briefings_feed
+      - SECRET_KEY=your-secret-key-here-change-in-production
     volumes:
       - ./:/app
+    depends_on:
+      - postgres
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -17,18 +21,22 @@ services:
       retries: 3
       start_period: 40s
 
-  # Optional: Add PostgreSQL for future database needs
-  # postgres:
-  #   image: postgres:15
-  #   environment:
-  #     POSTGRES_DB: football_transfers
-  #     POSTGRES_USER: fastapi
-  #     POSTGRES_PASSWORD: password
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #   ports:
-  #     - "5432:5432"
-  #   restart: unless-stopped
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: briefings_feed
+      POSTGRES_USER: fastapi
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fastapi -d briefings_feed"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-# volumes:
-#   postgres_data: 
+volumes:
+  postgres_data: 
