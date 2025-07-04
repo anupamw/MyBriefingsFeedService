@@ -801,6 +801,25 @@ async def root():
             }
             
             function showError(message) {
+                // Check if we're in the feed container
+                const feedContainer = document.getElementById('feed-container');
+                if (feedContainer.style.display !== 'none') {
+                    // Show error in feed container
+                    let errorDiv = feedContainer.querySelector('.error');
+                    if (!errorDiv) {
+                        errorDiv = document.createElement('div');
+                        errorDiv.className = 'error';
+                        errorDiv.style.cssText = 'color: #ff4757; margin: 10px 0; padding: 10px; background: #ffe6e6; border-radius: 5px;';
+                        feedContainer.insertBefore(errorDiv, feedContainer.firstChild);
+                    }
+                    errorDiv.textContent = message;
+                    setTimeout(() => {
+                        errorDiv.remove();
+                    }, 5000);
+                    return;
+                }
+                
+                // Show error in login/signup form
                 const activeForm = document.querySelector('.form-container.active');
                 let errorDiv = activeForm.querySelector('.error');
                 if (!errorDiv) {
@@ -812,6 +831,25 @@ async def root():
             }
             
             function showSuccess(message) {
+                // Check if we're in the feed container
+                const feedContainer = document.getElementById('feed-container');
+                if (feedContainer.style.display !== 'none') {
+                    // Show success in feed container
+                    let successDiv = feedContainer.querySelector('.success');
+                    if (!successDiv) {
+                        successDiv = document.createElement('div');
+                        successDiv.className = 'success';
+                        successDiv.style.cssText = 'color: #2ed573; margin: 10px 0; padding: 10px; background: #e6ffe6; border-radius: 5px;';
+                        feedContainer.insertBefore(successDiv, feedContainer.firstChild);
+                    }
+                    successDiv.textContent = message;
+                    setTimeout(() => {
+                        successDiv.remove();
+                    }, 5000);
+                    return;
+                }
+                
+                // Show success in login/signup form
                 const activeForm = document.querySelector('.form-container.active');
                 let successDiv = activeForm.querySelector('.success');
                 if (!successDiv) {
