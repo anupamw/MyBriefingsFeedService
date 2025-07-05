@@ -75,17 +75,29 @@ jobs:
       run: |
         echo "Building main app image..."
         docker build --platform linux/amd64 -t my-briefings-app:latest .
+        echo "✅ Main app image built successfully"
         
         echo "Building ingestion service image..."
         docker build --platform linux/amd64 -t my-briefings-ingestion:latest ./services/feed-ingestion/
+        echo "✅ Ingestion service image built successfully"
+        
+        echo "🔍 Listing built images..."
+        docker images | grep my-briefings
     
     - name: Save Docker images
       run: |
         echo "Saving main app image..."
         docker save my-briefings-app:latest -o my-briefings-app.tar
+        echo "✅ Main app image saved"
+        
         echo "Saving ingestion service image..."
         docker save my-briefings-ingestion:latest -o my-briefings-ingestion.tar
+        echo "✅ Ingestion service image saved"
+        
+        echo "🔍 Listing saved image files..."
         ls -la *.tar
+        echo "📊 Image file sizes:"
+        du -h *.tar
     
     - name: Setup SSH
       run: |
@@ -130,8 +142,15 @@ jobs:
         echo "Using: scp *.tar $DROPLET_USER@$DROPLET_IP:~/"
         echo "DROPLET_USER: $DROPLET_USER"
         echo "DROPLET_IP: $DROPLET_IP"
+        
+        echo "🔍 Checking files before copy..."
+        ls -la *.tar
+        
         scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no *.tar $DROPLET_USER@$DROPLET_IP:~/
         echo "✅ Images copied successfully"
+        
+        echo "🔍 Verifying files on droplet..."
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP "ls -la *.tar"
     
     - name: Copy Kubernetes manifests
       run: |
@@ -166,8 +185,13 @@ jobs:
           k3s ctr images rm docker.io/library/my-briefings-ingestion:latest || true
           
           echo "📦 Loading new images into k3s..."
+          echo "Loading main app image..."
           k3s ctr images import ~/my-briefings-app.tar
+          echo "✅ Main app image loaded"
+          
+          echo "Loading ingestion service image..."
           k3s ctr images import ~/my-briefings-ingestion.tar
+          echo "✅ Ingestion service image loaded"
           
           echo "🔍 Verifying images are loaded..."
           k3s ctr images ls | grep my-briefings
