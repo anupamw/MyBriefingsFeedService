@@ -10,6 +10,7 @@ env:
   DROPLET_IP: ${{ secrets.DIGITALOCEAN_HOST }}
   DROPLET_USER: root
   SSH_PRIVATE_KEY: ${{ secrets.DIGITALOCEAN_SSH_KEY }}
+  PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
 
 jobs:
   test:
@@ -198,7 +199,28 @@ jobs:
           
           echo "📋 Applying Kubernetes manifests..."
           kubectl apply -f ~/k8s/namespace.yaml
-          kubectl apply -f ~/k8s/secrets.yaml
+          
+          echo "🔐 Creating secrets..."
+          # Create secret with base64 encoded API key
+          if [ -z "$PERPLEXITY_API_KEY" ]; then
+            echo "⚠️  Warning: PERPLEXITY_API_KEY is not set, using empty value"
+            PERPLEXITY_API_KEY_B64=""
+          else
+            echo "✅ PERPLEXITY_API_KEY is set (length: ${#PERPLEXITY_API_KEY})"
+            PERPLEXITY_API_KEY_B64=$(echo -n "$PERPLEXITY_API_KEY" | base64)
+          fi
+          
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: api-secrets
+            namespace: my-briefings
+          type: Opaque
+          data:
+            perplexity-api-key: $PERPLEXITY_API_KEY_B64
+          EOF
+          
           kubectl apply -f ~/k8s/deployment.yaml
           kubectl apply -f ~/k8s/service.yaml
           kubectl apply -f ~/k8s/ingestion-deployment.yaml
