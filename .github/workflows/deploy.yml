@@ -78,7 +78,7 @@ jobs:
         echo "✅ Main app image built successfully"
         
         echo "Building ingestion service image..."
-        docker build --platform linux/amd64 -t my-briefings-ingestion:latest ./services/feed-ingestion/
+        docker build --platform linux/amd64 -t my-briefings-ingestion:latest -f ./services/feed-ingestion/Dockerfile .
         echo "✅ Ingestion service image built successfully"
         
         echo "🔍 Listing built images..."

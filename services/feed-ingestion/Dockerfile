@@ -9,14 +9,20 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
-COPY requirements.txt .
+COPY services/feed-ingestion/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
+# Copy shared modules first
+COPY shared /app/shared/
+
+# Copy ingestion service code
+COPY services/feed-ingestion /app/
 
 # Create necessary directories
 RUN mkdir -p /app/data
+
+# Set Python path to include shared modules
+ENV PYTHONPATH=/app:/app/shared
 
 # Expose port
 EXPOSE 8001
