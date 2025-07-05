@@ -10,7 +10,6 @@ env:
   DROPLET_IP: ${{ secrets.DIGITALOCEAN_HOST }}
   DROPLET_USER: root
   SSH_PRIVATE_KEY: ${{ secrets.DIGITALOCEAN_SSH_KEY }}
-  PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
 
 jobs:
   test:
@@ -153,11 +152,23 @@ jobs:
         echo "🔍 Verifying files on droplet..."
         ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP "ls -la *.tar"
     
-    - name: Copy Kubernetes manifests
+    - name: Copy Kubernetes manifests and env file
       run: |
         echo "📤 Copying Kubernetes manifests..."
         scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -r k8s/ $DROPLET_USER@$DROPLET_IP:~/
         echo "✅ Manifests copied successfully"
+        
+        echo "📤 Copying .env file if it exists..."
+        if [ -f .env ]; then
+          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no .env $DROPLET_USER@$DROPLET_IP:~/
+          echo "✅ .env file copied successfully"
+        else
+          echo "⚠️  .env file not found locally, you'll need to create it on the droplet"
+        fi
+        
+        echo "📤 Copying setup script..."
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no scripts/setup-env.sh $DROPLET_USER@$DROPLET_IP:~/
+        echo "✅ Setup script copied successfully"
     
     - name: Deploy to k3s
       run: |
@@ -200,14 +211,21 @@ jobs:
           echo "📋 Applying Kubernetes manifests..."
           kubectl apply -f ~/k8s/namespace.yaml
           
-          echo "🔐 Creating secrets..."
-          # Create secret with base64 encoded API key
-          if [ -z "$PERPLEXITY_API_KEY" ]; then
-            echo "⚠️  Warning: PERPLEXITY_API_KEY is not set, using empty value"
-            PERPLEXITY_API_KEY_B64=""
+          echo "🔐 Creating secrets from .env file..."
+          # Read API key from .env file on droplet
+          if [ -f ~/.env ]; then
+            echo "✅ .env file found on droplet"
+            PERPLEXITY_API_KEY=$(grep "^PERPLEXITY_API_KEY=" ~/.env | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+            if [ -n "$PERPLEXITY_API_KEY" ]; then
+              echo "✅ PERPLEXITY_API_KEY found in .env (length: ${#PERPLEXITY_API_KEY})"
+              PERPLEXITY_API_KEY_B64=$(echo -n "$PERPLEXITY_API_KEY" | base64)
+            else
+              echo "⚠️  Warning: PERPLEXITY_API_KEY not found in .env, using empty value"
+              PERPLEXITY_API_KEY_B64=""
+            fi
           else
-            echo "✅ PERPLEXITY_API_KEY is set (length: ${#PERPLEXITY_API_KEY})"
-            PERPLEXITY_API_KEY_B64=$(echo -n "$PERPLEXITY_API_KEY" | base64)
+            echo "⚠️  Warning: .env file not found on droplet, using empty value"
+            PERPLEXITY_API_KEY_B64=""
           fi
           
           cat <<EOF | kubectl apply -f -
