@@ -19,6 +19,7 @@ spec:
       - name: celery-beat
         image: my-briefings-ingestion:latest
         imagePullPolicy: Never
+        workingDir: /app
         command: ["celery", "-A", "services.feed_ingestion.celery_app", "beat", "--loglevel=info"]
         env:
         - name: DATABASE_URL
@@ -28,6 +29,8 @@ spec:
             secretKeyRef:
               name: api-secrets
               key: perplexity-api-key
+        - name: PYTHONPATH
+          value: "/app:/app/shared"
         resources:
           requests:
             memory: "128Mi"
