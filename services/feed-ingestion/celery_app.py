@@ -49,8 +49,8 @@ celery_app.conf.update(
     
     # Beat schedule for periodic tasks
     beat_schedule={
-        "ingest-perplexity": {
-            "task": "services.feed_ingestion.runners.perplexity_runner.ingest_perplexity",
+        "ingest-perplexity-all-users": {
+            "task": "services.feed_ingestion.runners.perplexity_runner.ingest_perplexity_for_all_users",
             "schedule": 21600.0,  # Every 6 hours (6 * 60 * 60 seconds)
         },
         # Disabled runners - uncomment to enable

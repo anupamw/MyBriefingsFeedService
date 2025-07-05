@@ -200,19 +200,38 @@ async def get_ingestion_jobs(
 
 @app.post("/ingest/perplexity")
 async def trigger_perplexity_ingestion(
+    user_id: Optional[int] = None,
     queries: Optional[List[str]] = None,
     background_tasks: BackgroundTasks = None
 ):
-    """Trigger Perplexity ingestion job"""
+    """Trigger Perplexity ingestion job (personalized or general)"""
     try:
         # Submit Celery task
         task = celery_app.send_task(
             "services.feed_ingestion.runners.perplexity_runner.ingest_perplexity",
-            args=[queries]
+            args=[user_id, queries]
         )
         
         return {
             "message": "Perplexity ingestion job started",
+            "task_id": task.id,
+            "status": "pending",
+            "user_id": user_id
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start ingestion job: {str(e)}")
+
+@app.post("/ingest/perplexity/all-users")
+async def trigger_perplexity_ingestion_all_users(background_tasks: BackgroundTasks = None):
+    """Trigger Perplexity ingestion for all users with categories"""
+    try:
+        # Submit Celery task
+        task = celery_app.send_task(
+            "services.feed_ingestion.runners.perplexity_runner.ingest_perplexity_for_all_users"
+        )
+        
+        return {
+            "message": "Perplexity ingestion for all users started",
             "task_id": task.id,
             "status": "pending"
         }
@@ -264,6 +283,7 @@ async def get_feed_items(
     offset: int = 0,
     category: Optional[str] = None,
     source: Optional[str] = None,
+    user_id: Optional[int] = None,
     db: SessionLocal = Depends(get_db)
 ):
     """Get feed items with optional filtering"""
@@ -273,6 +293,18 @@ async def get_feed_items(
         query = query.filter(FeedItem.category == category)
     if source:
         query = query.filter(FeedItem.source == source)
+    
+    # Filter by user if specified
+    if user_id:
+        # Get user's categories
+        user_categories = db.query(UserCategory).filter(
+            UserCategory.user_id == user_id,
+            UserCategory.is_active == True
+        ).all()
+        
+        if user_categories:
+            category_names = [cat.category_name for cat in user_categories]
+            query = query.filter(FeedItem.category.in_(category_names))
     
     items = query.order_by(FeedItem.published_at.desc()).offset(offset).limit(limit).all()
     
@@ -291,6 +323,68 @@ async def get_feed_items(
             tags=item.tags
         )
         for item in items
+    ]
+
+@app.get("/feed-items/user/{user_id}", response_model=List[FeedItemResponse])
+async def get_user_feed_items(
+    user_id: int,
+    limit: int = 50,
+    offset: int = 0,
+    db: SessionLocal = Depends(get_db)
+):
+    """Get personalized feed items for a specific user"""
+    # Get user's categories
+    user_categories = db.query(UserCategory).filter(
+        UserCategory.user_id == user_id,
+        UserCategory.is_active == True
+    ).all()
+    
+    if not user_categories:
+        # Return general items if no categories
+        items = db.query(FeedItem).filter(
+            FeedItem.category == "General"
+        ).order_by(FeedItem.published_at.desc()).offset(offset).limit(limit).all()
+    else:
+        # Get items matching user's categories
+        category_names = [cat.category_name for cat in user_categories]
+        items = db.query(FeedItem).filter(
+            FeedItem.category.in_(category_names)
+        ).order_by(FeedItem.published_at.desc()).offset(offset).limit(limit).all()
+    
+    return [
+        FeedItemResponse(
+            id=item.id,
+            title=item.title,
+            summary=item.summary,
+            content=item.content,
+            url=item.url,
+            source=item.source,
+            published_at=item.published_at.isoformat() if item.published_at else None,
+            created_at=item.created_at.isoformat(),
+            category=item.category,
+            engagement_score=item.engagement_score,
+            tags=item.tags
+        )
+        for item in items
+    ]
+
+@app.get("/user-categories/{user_id}")
+async def get_user_categories(user_id: int, db: SessionLocal = Depends(get_db)):
+    """Get categories for a specific user"""
+    categories = db.query(UserCategory).filter(
+        UserCategory.user_id == user_id,
+        UserCategory.is_active == True
+    ).all()
+    
+    return [
+        {
+            "id": cat.id,
+            "category_name": cat.category_name,
+            "keywords": cat.keywords or [],
+            "sources": cat.sources or [],
+            "created_at": cat.created_at.isoformat()
+        }
+        for cat in categories
     ]
 
 @app.get("/stats")
