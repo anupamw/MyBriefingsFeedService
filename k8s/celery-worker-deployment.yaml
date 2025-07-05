@@ -20,7 +20,7 @@ spec:
         image: my-briefings-ingestion:latest
         imagePullPolicy: Never
         workingDir: /app
-        command: ["celery", "-A", "services.feed_ingestion.celery_app", "worker", "--loglevel=info"]
+        command: ["celery", "-A", "celery_app", "worker", "--loglevel=info"]
         env:
         - name: DATABASE_URL
           value: "postgresql://fastapi:password@64.227.134.87:5432/briefings_feed"
