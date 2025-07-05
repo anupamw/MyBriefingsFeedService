@@ -92,7 +92,7 @@ async def startup_event():
     """Initialize database on startup"""
     init_database()
 
-@app.get("/health")
+@app.get("/ingestion/health")
 async def health_check():
     """Health check endpoint"""
     return {
@@ -208,7 +208,7 @@ async def trigger_perplexity_ingestion(
     try:
         # Submit Celery task
         task = celery_app.send_task(
-            "services.feed_ingestion.runners.perplexity_runner.ingest_perplexity",
+            "runners.perplexity_runner.ingest_perplexity",
             args=[user_id, queries]
         )
         
@@ -227,7 +227,7 @@ async def trigger_perplexity_ingestion_all_users(background_tasks: BackgroundTas
     try:
         # Submit Celery task
         task = celery_app.send_task(
-            "services.feed_ingestion.runners.perplexity_runner.ingest_perplexity_for_all_users"
+            "runners.perplexity_runner.ingest_perplexity_for_all_users"
         )
         
         return {
@@ -247,7 +247,7 @@ async def trigger_reddit_ingestion(
     try:
         # Submit Celery task
         task = celery_app.send_task(
-            "services.feed_ingestion.runners.reddit_runner.ingest_reddit",
+            "runners.reddit_runner.ingest_reddit",
             args=[subreddits, time_filter]
         )
         
@@ -265,7 +265,7 @@ async def trigger_social_ingestion(sources: Optional[List[str]] = None):
     try:
         # Submit Celery task
         task = celery_app.send_task(
-            "services.feed_ingestion.runners.social_runner.ingest_social",
+            "runners.social_runner.ingest_social",
             args=[sources]
         )
         

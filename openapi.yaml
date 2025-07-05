@@ -670,7 +670,7 @@ paths:
   # =============================================================================
 
   # Health Check
-  /health:
+  /ingestion/health:
     get:
       tags:
         - Health
