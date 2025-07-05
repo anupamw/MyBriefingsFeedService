@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feed-ingestion
+  namespace: briefings-feed
+  labels:
+    app: feed-ingestion
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: feed-ingestion
+  template:
+    metadata:
+      labels:
+        app: feed-ingestion
+    spec:
+      containers:
+      - name: feed-ingestion-api
+        image: feed-ingestion:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8001
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://fastapi:password@postgres-service:5432/briefings_feed"
+        - name: PERPLEXITY_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: api-keys
+              key: perplexity-api-key
+        # Disabled Reddit API keys - uncomment to enable
+        # - name: REDDIT_CLIENT_ID
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: api-keys
+        #       key: reddit-client-id
+        # - name: REDDIT_CLIENT_SECRET
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: api-keys
+        #       key: reddit-client-secret
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      - name: celery-worker
+        image: feed-ingestion:latest
+        imagePullPolicy: IfNotPresent
+        command: ["celery", "-A", "celery_app", "worker", "--loglevel=info"]
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://fastapi:password@postgres-service:5432/briefings_feed"
+        - name: PERPLEXITY_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: api-keys
+              key: perplexity-api-key
+        # Disabled Reddit API keys - uncomment to enable
+        # - name: REDDIT_CLIENT_ID
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: api-keys
+        #       key: reddit-client-id
+        # - name: REDDIT_CLIENT_SECRET
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: api-keys
+        #       key: reddit-client-secret
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      - name: celery-beat
+        image: feed-ingestion:latest
+        imagePullPolicy: IfNotPresent
+        command: ["celery", "-A", "celery_app", "beat", "--loglevel=info"]
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://fastapi:password@postgres-service:5432/briefings_feed"
+        - name: PERPLEXITY_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: api-keys
+              key: perplexity-api-key
+        # Disabled Reddit API keys - uncomment to enable
+        # - name: REDDIT_CLIENT_ID
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: api-keys
+        #       key: reddit-client-id
+        # - name: REDDIT_CLIENT_SECRET
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: api-keys
+        #       key: reddit-client-secret
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m" 
