@@ -1,0 +1,1156 @@
+openapi: 3.0.3
+info:
+  title: My Briefings Feed Service API
+  description: |
+    A comprehensive API for personalized news feed service with user authentication, 
+    content ingestion, and category management. The service consists of two main components:
+    
+    ## Main Application (Port 8000)
+    - User authentication and management
+    - Feed display and user categories
+    - Web interface for personalized content
+    
+    ## Ingestion Service (Port 8001)
+    - Content ingestion from various sources (Perplexity, Reddit, Social Media)
+    - Background job processing with Celery
+    - Data source management and monitoring
+    
+    ## Authentication
+    The API uses JWT (JSON Web Token) authentication. Include the token in the Authorization header:
+    ```
+    Authorization: Bearer <your_jwt_token>
+    ```
+    
+    ## Rate Limiting
+    - Authentication endpoints: 10 requests per minute
+    - Feed endpoints: 100 requests per minute
+    - Ingestion endpoints: 20 requests per minute
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@mybriefings.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8000
+    description: Main Application (Development)
+  - url: http://localhost:8001
+    description: Ingestion Service (Development)
+  - url: https://your-domain.com:30100
+    description: Main Application (Production)
+  - url: https://your-domain.com:30101
+    description: Ingestion Service (Production)
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from /auth/login endpoint
+
+  schemas:
+    # User Models
+    UserCreate:
+      type: object
+      required:
+        - username
+        - email
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+          description: Unique username for the account
+          example: "john_doe"
+        email:
+          type: string
+          format: email
+          description: User's email address
+          example: "john@example.com"
+        password:
+          type: string
+          minLength: 8
+          description: User's password (will be hashed)
+          example: "securepassword123"
+
+    UserLogin:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          description: Username for authentication
+          example: "john_doe"
+        password:
+          type: string
+          description: Password for authentication
+          example: "securepassword123"
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Unique user ID
+          example: 1
+        username:
+          type: string
+          description: Username
+          example: "john_doe"
+        email:
+          type: string
+          format: email
+          description: User's email address
+          example: "john@example.com"
+        created_at:
+          type: string
+          format: date-time
+          description: Account creation timestamp
+          example: "2024-01-15T10:30:00Z"
+
+    Token:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT access token
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        token_type:
+          type: string
+          description: Token type (always "bearer")
+          example: "bearer"
+
+    # Feed Item Models
+    FeedItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Unique feed item ID
+          example: 1
+        title:
+          type: string
+          description: Title of the feed item
+          example: "Latest AI Developments"
+        summary:
+          type: string
+          description: Summary of the content
+          example: "Recent breakthroughs in artificial intelligence..."
+        content:
+          type: string
+          description: Full content of the feed item
+        url:
+          type: string
+          format: uri
+          description: Source URL
+          example: "https://example.com/article"
+        source:
+          type: string
+          description: Source of the content
+          example: "Perplexity AI"
+        published_at:
+          type: string
+          format: date-time
+          description: Publication timestamp
+          example: "2024-01-15T10:30:00Z"
+        created_at:
+          type: string
+          format: date-time
+          description: When the item was added to the system
+          example: "2024-01-15T10:30:00Z"
+
+    # User Category Models
+    UserCategoryCreate:
+      type: object
+      required:
+        - category_name
+      properties:
+        category_name:
+          type: string
+          maxLength: 140
+          description: Name of the category
+          example: "Technology"
+
+    UserCategory:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Unique category ID
+          example: 1
+        user_id:
+          type: integer
+          description: ID of the user who owns this category
+          example: 1
+        category_name:
+          type: string
+          description: Name of the category
+          example: "Technology"
+        created_at:
+          type: string
+          format: date-time
+          description: Category creation timestamp
+          example: "2024-01-15T10:30:00Z"
+
+    # Data Source Models (Ingestion Service)
+    DataSourceCreate:
+      type: object
+      required:
+        - name
+        - display_name
+      properties:
+        name:
+          type: string
+          description: Internal name for the data source
+          example: "perplexity"
+        display_name:
+          type: string
+          description: Human-readable name
+          example: "Perplexity AI"
+        api_key:
+          type: string
+          description: API key for the data source
+          example: "pplx-..."
+        base_url:
+          type: string
+          format: uri
+          description: Base URL for the API
+          example: "https://api.perplexity.ai"
+        rate_limit_per_minute:
+          type: integer
+          default: 60
+          description: Rate limit for the data source
+          example: 60
+        config:
+          type: object
+          description: Additional configuration for the data source
+
+    DataSourceResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Unique data source ID
+          example: 1
+        name:
+          type: string
+          description: Internal name
+          example: "perplexity"
+        display_name:
+          type: string
+          description: Human-readable name
+          example: "Perplexity AI"
+        base_url:
+          type: string
+          format: uri
+          description: Base URL for the API
+          example: "https://api.perplexity.ai"
+        rate_limit_per_minute:
+          type: integer
+          description: Rate limit per minute
+          example: 60
+        is_active:
+          type: boolean
+          description: Whether the data source is active
+          example: true
+        last_used:
+          type: string
+          format: date-time
+          description: Last time the data source was used
+          example: "2024-01-15T10:30:00Z"
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+          example: "2024-01-15T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2024-01-15T10:30:00Z"
+
+    # Ingestion Job Models
+    IngestionJobResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Unique job ID
+          example: 1
+        job_type:
+          type: string
+          description: Type of ingestion job
+          example: "perplexity"
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+          description: Current status of the job
+          example: "completed"
+        started_at:
+          type: string
+          format: date-time
+          description: When the job started
+          example: "2024-01-15T10:30:00Z"
+        completed_at:
+          type: string
+          format: date-time
+          description: When the job completed
+          example: "2024-01-15T10:35:00Z"
+        error_message:
+          type: string
+          description: Error message if the job failed
+        items_processed:
+          type: integer
+          description: Number of items processed
+          example: 100
+        items_created:
+          type: integer
+          description: Number of new items created
+          example: 50
+        items_updated:
+          type: integer
+          description: Number of existing items updated
+          example: 25
+        created_at:
+          type: string
+          format: date-time
+          description: Job creation timestamp
+          example: "2024-01-15T10:30:00Z"
+
+    # Error Models
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Error message
+          example: "Username already registered"
+
+    # Success Response Models
+    SuccessMessage:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Success message
+          example: "Category deleted successfully"
+
+    # Task Response Models
+    TaskResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Task status message
+          example: "Perplexity ingestion job started"
+        task_id:
+          type: string
+          description: Celery task ID
+          example: "abc123-def456-ghi789"
+        status:
+          type: string
+          description: Task status
+          example: "pending"
+        user_id:
+          type: integer
+          description: User ID (for personalized ingestion)
+          example: 1
+
+    # Statistics Models
+    IngestionStats:
+      type: object
+      properties:
+        total_feed_items:
+          type: integer
+          description: Total number of feed items
+          example: 1500
+        total_ingestion_jobs:
+          type: integer
+          description: Total number of ingestion jobs
+          example: 100
+        active_data_sources:
+          type: integer
+          description: Number of active data sources
+          example: 3
+        recent_items_created:
+          type: integer
+          description: Items created in the last 7 days
+          example: 150
+        recent_items_updated:
+          type: integer
+          description: Items updated in the last 7 days
+          example: 75
+        recent_jobs_count:
+          type: integer
+          description: Jobs in the last 7 days
+          example: 25
+
+paths:
+  # =============================================================================
+  # MAIN APPLICATION ENDPOINTS (Port 8000)
+  # =============================================================================
+
+  # Health Check
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check endpoint
+      description: Check if the service is running
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: "2024-01-15T10:30:00Z"
+
+  # Authentication Endpoints
+  /auth/signup:
+    post:
+      tags:
+        - Authentication
+      summary: Create a new user account
+      description: Register a new user with username, email, and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '200':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Username or email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Authenticate user and get JWT token
+      description: Login with username and password to receive a JWT token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLogin'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Token'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get current user information
+      description: Retrieve information about the currently authenticated user
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Current user information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Feed Endpoints
+  /feed:
+    get:
+      tags:
+        - Feed
+      summary: Get feed items with pagination
+      description: Retrieve feed items with optional pagination parameters
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: Number of items to return
+          required: false
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          description: Number of items to skip
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: List of feed items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FeedItem'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /feed/{item_id}:
+    get:
+      tags:
+        - Feed
+      summary: Get a specific feed item
+      description: Retrieve a specific feed item by its ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          description: ID of the feed item
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Feed item details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedItem'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Feed item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # User Categories Endpoints
+  /user/categories:
+    get:
+      tags:
+        - User Categories
+      summary: Get user categories
+      description: Retrieve all categories for the current user
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of user categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserCategory'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - User Categories
+      summary: Create a new user category
+      description: Create a new category for the current user (max 5 categories)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCategoryCreate'
+      responses:
+        '200':
+          description: Category created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserCategory'
+        '400':
+          description: Maximum categories reached or category already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /user/categories/{category_id}:
+    delete:
+      tags:
+        - User Categories
+      summary: Delete a user category
+      description: Delete a specific category for the current user
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: category_id
+          in: path
+          required: true
+          description: ID of the category to delete
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Category deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessage'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Category not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # =============================================================================
+  # INGESTION SERVICE ENDPOINTS (Port 8001)
+  # =============================================================================
+
+  # Health Check
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Ingestion service health check
+      description: Check if the ingestion service is running
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  service:
+                    type: string
+                    example: "Feed Ingestion Service"
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: "2024-01-15T10:30:00Z"
+
+  # Data Source Management
+  /data-sources:
+    get:
+      tags:
+        - Data Sources
+      summary: Get all data sources
+      description: Retrieve all configured data sources
+      responses:
+        '200':
+          description: List of data sources
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DataSourceResponse'
+
+    post:
+      tags:
+        - Data Sources
+      summary: Create a new data source
+      description: Create a new data source configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataSourceCreate'
+      responses:
+        '200':
+          description: Data source created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataSourceResponse'
+        '400':
+          description: Data source already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /data-sources/{source_id}/toggle:
+    put:
+      tags:
+        - Data Sources
+      summary: Toggle data source status
+      description: Activate or deactivate a data source
+      parameters:
+        - name: source_id
+          in: path
+          required: true
+          description: ID of the data source
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Data source status toggled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Data source perplexity activated"
+        '404':
+          description: Data source not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Ingestion Jobs
+  /ingestion-jobs:
+    get:
+      tags:
+        - Ingestion Jobs
+      summary: Get ingestion jobs
+      description: Retrieve ingestion jobs with optional filtering
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of jobs to return
+          required: false
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
+        - name: job_type
+          in: query
+          description: Filter by job type
+          required: false
+          schema:
+            type: string
+            enum: [perplexity, reddit, social]
+        - name: status
+          in: query
+          description: Filter by job status
+          required: false
+          schema:
+            type: string
+            enum: [pending, running, completed, failed]
+      responses:
+        '200':
+          description: List of ingestion jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IngestionJobResponse'
+
+  # Ingestion Triggers
+  /ingest/perplexity:
+    post:
+      tags:
+        - Ingestion
+      summary: Trigger Perplexity ingestion
+      description: Start a Perplexity ingestion job (personalized or general)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: integer
+                  description: User ID for personalized ingestion
+                  example: 1
+                queries:
+                  type: array
+                  items:
+                    type: string
+                  description: Custom queries to use
+                  example: ["What are the latest AI developments?"]
+      responses:
+        '200':
+          description: Ingestion job started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '500':
+          description: Failed to start ingestion job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ingest/perplexity/all-users:
+    post:
+      tags:
+        - Ingestion
+      summary: Trigger Perplexity ingestion for all users
+      description: Start ingestion for all users with categories
+      responses:
+        '200':
+          description: Ingestion job started for all users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '500':
+          description: Failed to start ingestion job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ingest/reddit:
+    post:
+      tags:
+        - Ingestion
+      summary: Trigger Reddit ingestion
+      description: Start a Reddit ingestion job
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                subreddits:
+                  type: array
+                  items:
+                    type: string
+                  description: Subreddits to ingest from
+                  example: ["technology", "science"]
+                time_filter:
+                  type: string
+                  enum: [hour, day, week, month, year, all]
+                  default: "day"
+                  description: Time filter for posts
+      responses:
+        '200':
+          description: Reddit ingestion job started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '500':
+          description: Failed to start ingestion job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /ingest/social:
+    post:
+      tags:
+        - Ingestion
+      summary: Trigger social media ingestion
+      description: Start a social media ingestion job
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sources:
+                  type: array
+                  items:
+                    type: string
+                  description: Social media sources to ingest from
+                  example: ["twitter", "mastodon"]
+      responses:
+        '200':
+          description: Social media ingestion job started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '500':
+          description: Failed to start ingestion job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Feed Items (Ingestion Service)
+  /feed-items:
+    get:
+      tags:
+        - Feed Items
+      summary: Get feed items with filtering
+      description: Retrieve feed items with optional filtering and pagination
+      parameters:
+        - name: limit
+          in: query
+          description: Number of items to return
+          required: false
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          description: Number of items to skip
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: category
+          in: query
+          description: Filter by category
+          required: false
+          schema:
+            type: string
+        - name: source
+          in: query
+          description: Filter by source
+          required: false
+          schema:
+            type: string
+        - name: user_id
+          in: query
+          description: Filter by user categories
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of feed items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FeedItemResponse'
+
+  /feed-items/user/{user_id}:
+    get:
+      tags:
+        - Feed Items
+      summary: Get personalized feed items for user
+      description: Retrieve feed items personalized for a specific user based on their categories
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: ID of the user
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          description: Number of items to return
+          required: false
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          description: Number of items to skip
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Personalized feed items for the user
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FeedItemResponse'
+
+  # User Categories (Ingestion Service)
+  /user-categories/{user_id}:
+    get:
+      tags:
+        - User Categories
+      summary: Get user categories
+      description: Retrieve categories for a specific user
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: ID of the user
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: User categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                      description: Category ID
+                    category_name:
+                      type: string
+                      description: Category name
+                    keywords:
+                      type: array
+                      items:
+                        type: string
+                      description: Keywords for this category
+                    sources:
+                      type: array
+                      items:
+                        type: string
+                      description: Preferred sources for this category
+                    created_at:
+                      type: string
+                      format: date-time
+                      description: Category creation timestamp
+
+  # Statistics
+  /stats:
+    get:
+      tags:
+        - Statistics
+      summary: Get ingestion statistics
+      description: Retrieve statistics about feed items and ingestion jobs
+      responses:
+        '200':
+          description: Ingestion statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestionStats'
+
+  # Task Status
+  /task/{task_id}:
+    get:
+      tags:
+        - Tasks
+      summary: Get task status
+      description: Check the status of a Celery task
+      parameters:
+        - name: task_id
+          in: path
+          required: true
+          description: Celery task ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Task status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  task_id:
+                    type: string
+                    description: Task ID
+                  status:
+                    type: string
+                    enum: [PENDING, RUNNING, SUCCESS, FAILURE]
+                    description: Task status
+                  result:
+                    type: object
+                    description: Task result (if completed)
+                  info:
+                    type: object
+                    description: Additional task information
+        '404':
+          description: Task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Authentication
+    description: User authentication and management
+  - name: Feed
+    description: Feed item retrieval and management
+  - name: User Categories
+    description: User category management
+  - name: Data Sources
+    description: Data source configuration and management
+  - name: Ingestion Jobs
+    description: Background job management
+  - name: Ingestion
+    description: Content ingestion triggers
+  - name: Feed Items
+    description: Feed item management and filtering
+  - name: Statistics
+    description: System statistics and monitoring
+  - name: Tasks
+    description: Task status and monitoring 

@@ -12,10 +12,10 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../'))
 from shared.database.connection import SessionLocal, init_database
 from shared.models.database_models import DataSource, FeedItem, IngestionJob, UserCategory, UserDB
-from services.feed_ingestion.celery_app import celery_app
-from services.feed_ingestion.runners.perplexity_runner import PerplexityRunner
-from services.feed_ingestion.runners.reddit_runner import RedditRunner
-from services.feed_ingestion.runners.social_runner import SocialRunner
+from celery_app import celery_app
+from runners.perplexity_runner import PerplexityRunner
+from runners.reddit_runner import RedditRunner
+from runners.social_runner import SocialRunner
 
 load_dotenv()
 

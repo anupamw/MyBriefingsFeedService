@@ -12,7 +12,7 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../../'))
 from shared.database.connection import SessionLocal
 from shared.models.database_models import DataSource, FeedItem, IngestionJob, ContentCache
-from services.feed_ingestion.celery_app import celery_app
+from celery_app import celery_app
 
 load_dotenv()
 

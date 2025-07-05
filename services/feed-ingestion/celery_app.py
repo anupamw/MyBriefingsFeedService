@@ -14,9 +14,9 @@ celery_app = Celery(
     broker=f"sqla+{DATABASE_URL}",
     backend=f"db+{DATABASE_URL}",
     include=[
-        "services.feed_ingestion.runners.perplexity_runner",
-        "services.feed_ingestion.runners.reddit_runner",
-        "services.feed_ingestion.runners.social_runner"
+        "runners.perplexity_runner",
+        "runners.reddit_runner",
+        "runners.social_runner"
     ]
 )
 
@@ -24,7 +24,7 @@ celery_app = Celery(
 celery_app.conf.update(
     # Task routing
     task_routes={
-        "services.feed_ingestion.runners.*": {"queue": "ingestion"},
+        "runners.*": {"queue": "ingestion"},
     },
     
     # Task serialization
@@ -50,16 +50,16 @@ celery_app.conf.update(
     # Beat schedule for periodic tasks
     beat_schedule={
         "ingest-perplexity-all-users": {
-            "task": "services.feed_ingestion.runners.perplexity_runner.ingest_perplexity_for_all_users",
+            "task": "runners.perplexity_runner.ingest_perplexity_for_all_users",
             "schedule": 21600.0,  # Every 6 hours (6 * 60 * 60 seconds)
         },
         # Disabled runners - uncomment to enable
         # "ingest-reddit": {
-        #     "task": "services.feed_ingestion.runners.reddit_runner.ingest_reddit",
+        #     "task": "runners.reddit_runner.ingest_reddit",
         #     "schedule": 600.0,  # Every 10 minutes
         # },
         # "ingest-social": {
-        #     "task": "services.feed_ingestion.runners.social_runner.ingest_social",
+        #     "task": "runners.social_runner.ingest_social",
         #     "schedule": 900.0,  # Every 15 minutes
         # },
     },

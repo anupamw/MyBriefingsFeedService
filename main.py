@@ -12,6 +12,7 @@ from jwt import PyJWTError
 from passlib.context import CryptContext
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi_openapi_ui import FastAPIOpenAPIUI
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -1110,6 +1111,26 @@ async def delete_item(item_id: int):
             del items_db[i]
             return {"message": "Item deleted successfully"}
     raise HTTPException(status_code=404, detail="Item not found")
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Mount Swagger UI at /custom-swagger
+FastAPIOpenAPIUI(
+    app=app,
+    path="/custom-swagger",
+    title="Custom Swagger UI",
+    openapi_url="/static/openapi.yaml"
+)
+
+# Mount Redoc at /custom-redoc
+FastAPIOpenAPIUI(
+    app=app,
+    path="/custom-redoc",
+    title="Custom Redoc",
+    openapi_url="/static/openapi.yaml",
+    swagger_ui=False,
+    redoc=True
+)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000) 
