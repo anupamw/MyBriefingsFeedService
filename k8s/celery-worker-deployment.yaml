@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-briefings-celery-worker
+  namespace: my-briefings
+  labels:
+    app: my-briefings-celery-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-briefings-celery-worker
+  template:
+    metadata:
+      labels:
+        app: my-briefings-celery-worker
+    spec:
+      containers:
+      - name: celery-worker
+        image: my-briefings-ingestion:latest
+        imagePullPolicy: Never
+        command: ["celery", "-A", "services.feed_ingestion.celery_app", "worker", "--loglevel=info"]
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://fastapi:password@64.227.134.87:5432/briefings_feed"
+        - name: PERPLEXITY_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: api-secrets
+              key: perplexity-api-key
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m" 

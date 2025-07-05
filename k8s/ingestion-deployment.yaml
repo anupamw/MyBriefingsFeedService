@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-briefings-ingestion
+  namespace: my-briefings
+  labels:
+    app: my-briefings-ingestion
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-briefings-ingestion
+  template:
+    metadata:
+      labels:
+        app: my-briefings-ingestion
+    spec:
+      containers:
+      - name: my-briefings-ingestion
+        image: my-briefings-ingestion:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8001
+        env:
+        - name: PORT
+          value: "8001"
+        - name: DATABASE_URL
+          value: "postgresql://fastapi:password@64.227.134.87:5432/briefings_feed"
+        - name: PERPLEXITY_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: api-secrets
+              key: perplexity-api-key
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 5
+          periodSeconds: 5 

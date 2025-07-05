@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-briefings-ingestion-service
+  namespace: my-briefings
+  labels:
+    app: my-briefings-ingestion
+spec:
+  selector:
+    app: my-briefings-ingestion
+  ports:
+  - name: http
+    port: 8001
+    targetPort: 8001
+    nodePort: 30101
+  type: NodePort 

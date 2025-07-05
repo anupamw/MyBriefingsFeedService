@@ -71,14 +71,21 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
     
-    - name: Build Docker image for x86_64
+    - name: Build Docker images for x86_64
       run: |
+        echo "Building main app image..."
         docker build --platform linux/amd64 -t my-briefings-app:latest .
+        
+        echo "Building ingestion service image..."
+        docker build --platform linux/amd64 -t my-briefings-ingestion:latest ./services/feed-ingestion/
     
-    - name: Save Docker image
+    - name: Save Docker images
       run: |
+        echo "Saving main app image..."
         docker save my-briefings-app:latest -o my-briefings-app.tar
-        ls -la my-briefings-app.tar
+        echo "Saving ingestion service image..."
+        docker save my-briefings-ingestion:latest -o my-briefings-ingestion.tar
+        ls -la *.tar
     
     - name: Setup SSH
       run: |
@@ -117,14 +124,14 @@ jobs:
         echo "🔍 Testing SSH connection..."
         ssh -i ~/.ssh/id_rsa -o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP "echo 'SSH test successful'" || echo "SSH test failed"
     
-    - name: Copy image to droplet
+    - name: Copy images to droplet
       run: |
-        echo "📤 Copying image to droplet..."
-        echo "Using: scp my-briefings-app.tar $DROPLET_USER@$DROPLET_IP:~/"
+        echo "📤 Copying images to droplet..."
+        echo "Using: scp *.tar $DROPLET_USER@$DROPLET_IP:~/"
         echo "DROPLET_USER: $DROPLET_USER"
         echo "DROPLET_IP: $DROPLET_IP"
-        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no my-briefings-app.tar $DROPLET_USER@$DROPLET_IP:~/
-        echo "✅ Image copied successfully"
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no *.tar $DROPLET_USER@$DROPLET_IP:~/
+        echo "✅ Images copied successfully"
     
     - name: Copy Kubernetes manifests
       run: |
@@ -154,25 +161,38 @@ jobs:
             echo "PostgreSQL is already running"
           fi
           
-          echo "🧹 Cleaning up old image..."
+          echo "🧹 Cleaning up old images..."
           k3s ctr images rm docker.io/library/my-briefings-app:latest || true
+          k3s ctr images rm docker.io/library/my-briefings-ingestion:latest || true
           
-          echo "📦 Loading new image into k3s..."
+          echo "📦 Loading new images into k3s..."
           k3s ctr images import ~/my-briefings-app.tar
+          k3s ctr images import ~/my-briefings-ingestion.tar
           
-          echo "🔍 Verifying image is loaded..."
-          k3s ctr images ls | grep my-briefings-app
+          echo "🔍 Verifying images are loaded..."
+          k3s ctr images ls | grep my-briefings
           
           echo "📋 Applying Kubernetes manifests..."
           kubectl apply -f ~/k8s/namespace.yaml
+          kubectl apply -f ~/k8s/secrets.yaml
           kubectl apply -f ~/k8s/deployment.yaml
           kubectl apply -f ~/k8s/service.yaml
+          kubectl apply -f ~/k8s/ingestion-deployment.yaml
+          kubectl apply -f ~/k8s/ingestion-service.yaml
+          kubectl apply -f ~/k8s/celery-worker-deployment.yaml
+          kubectl apply -f ~/k8s/celery-beat-deployment.yaml
           
-          echo "🔄 Rolling out deployment..."
+          echo "🔄 Rolling out deployments..."
           kubectl rollout restart deployment/my-briefings-app -n my-briefings
+          kubectl rollout restart deployment/my-briefings-ingestion -n my-briefings
+          kubectl rollout restart deployment/my-briefings-celery-worker -n my-briefings
+          kubectl rollout restart deployment/my-briefings-celery-beat -n my-briefings
           
-          echo "⏳ Waiting for deployment to be ready..."
+          echo "⏳ Waiting for deployments to be ready..."
           kubectl rollout status deployment/my-briefings-app -n my-briefings --timeout=300s
+          kubectl rollout status deployment/my-briefings-ingestion -n my-briefings --timeout=300s
+          kubectl rollout status deployment/my-briefings-celery-worker -n my-briefings --timeout=300s
+          kubectl rollout status deployment/my-briefings-celery-beat -n my-briefings --timeout=300s
           
           echo "🔍 Checking pod status..."
           kubectl get pods -n my-briefings
