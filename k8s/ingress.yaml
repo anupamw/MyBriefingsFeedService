@@ -16,4 +16,11 @@ spec:
           service:
             name: my-briefings-service
             port:
-              number: 80 
+              number: 8000
+      - path: /ingestion
+        pathType: Prefix
+        backend:
+          service:
+            name: my-briefings-ingestion-service
+            port:
+              number: 8001 
