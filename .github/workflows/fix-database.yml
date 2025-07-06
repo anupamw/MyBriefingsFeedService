@@ -34,6 +34,17 @@ jobs:
     - name: Copy fix script to droplet
       run: |
         echo "📤 Copying database fix script to droplet..."
+        echo "🔍 Current directory: $(pwd)"
+        echo "🔍 Listing files in current directory:"
+        ls -la
+        echo "🔍 Checking if fix_database_simple.sh exists:"
+        if [ -f "fix_database_simple.sh" ]; then
+          echo "✅ fix_database_simple.sh exists"
+          echo "📄 File size: $(wc -c < fix_database_simple.sh) bytes"
+        else
+          echo "❌ fix_database_simple.sh does not exist"
+          exit 1
+        fi
         scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no fix_database_simple.sh $DROPLET_USER@$DROPLET_IP:/root/
         
     - name: Run database fix
