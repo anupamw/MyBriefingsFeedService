@@ -1,0 +1,49 @@
+name: Deploy and Run Ingestion Service Fix
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_fix:
+        description: 'Run the ingestion service fix script'
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  deploy-and-fix:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Copy fix script to droplet
+      run: |
+        echo "📤 Copying fix script to droplet..."
+        scp -o StrictHostKeyChecking=no fix_ingestion_service.sh ${{ secrets.DROPLET_USER }}@${{ secrets.DROPLET_IP }}:/home/${{ secrets.DROPLET_USER }}/
+        
+    - name: Run fix script on droplet
+      run: |
+        echo "🔧 Running ingestion service fix on droplet..."
+        ssh -o StrictHostKeyChecking=no ${{ secrets.DROPLET_USER }}@${{ secrets.DROPLET_IP }} << 'EOF'
+          cd /home/${{ secrets.DROPLET_USER }}
+          chmod +x fix_ingestion_service.sh
+          ./fix_ingestion_service.sh
+        EOF
+        
+    - name: Clean up script
+      run: |
+        echo "🧹 Cleaning up script from droplet..."
+        ssh -o StrictHostKeyChecking=no ${{ secrets.DROPLET_USER }}@${{ secrets.DROPLET_IP }} "rm -f /home/${{ secrets.DROPLET_USER }}/fix_ingestion_service.sh"
+        
+    - name: Verify fix results
+      run: |
+        echo "✅ Verifying fix results..."
+        ssh -o StrictHostKeyChecking=no ${{ secrets.DROPLET_USER }}@${{ secrets.DROPLET_IP }} << 'EOF'
+          echo "📊 Checking pod status..."
+          kubectl get pods -n my-briefings
+          
+          echo ""
+          echo "📊 Testing ingestion service..."
+          curl -s http://64.227.134.87:30101/ingestion/health | jq '.'
+        EOF 
