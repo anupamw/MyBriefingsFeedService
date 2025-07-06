@@ -9,6 +9,11 @@ on:
         default: true
         type: boolean
 
+env:
+  DROPLET_IP: ${{ secrets.DIGITALOCEAN_HOST }}
+  DROPLET_USER: root
+  SSH_PRIVATE_KEY: ${{ secrets.DIGITALOCEAN_SSH_KEY }}
+
 jobs:
   deploy-and-fix:
     runs-on: ubuntu-latest
@@ -20,33 +25,42 @@ jobs:
     - name: Debug secrets and environment
       run: |
         echo "🔍 Debugging secrets and environment..."
-        echo "DROPLET_IP: ${{ secrets.DROPLET_IP }}"
-        echo "DROPLET_USER: ${{ secrets.DROPLET_USER }}"
+        echo "DROPLET_IP: $DROPLET_IP"
+        echo "DROPLET_USER: $DROPLET_USER"
         echo "DROPLET_IP length: ${#DROPLET_IP}"
-        echo "DROPLET_USER length: ${#DROPLET_USER}"
+        echo "SSH_PRIVATE_KEY length: ${#SSH_PRIVATE_KEY}"
         
-        if [ -z "${{ secrets.DROPLET_IP }}" ]; then
+        if [ -z "$DROPLET_IP" ]; then
           echo "❌ DROPLET_IP is empty or not set"
           exit 1
         fi
         
-        if [ -z "${{ secrets.DROPLET_USER }}" ]; then
-          echo "❌ DROPLET_USER is empty or not set"
+        if [ -z "$SSH_PRIVATE_KEY" ]; then
+          echo "❌ SSH_PRIVATE_KEY is empty or not set"
           exit 1
         fi
         
         echo "✅ Secrets appear to be set"
         
+    - name: Setup SSH
+      run: |
+        echo "🔧 Setting up SSH..."
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H $DROPLET_IP >> ~/.ssh/known_hosts
+        echo "SSH setup complete"
+        
     - name: Test SSH connection
       run: |
         echo "🔍 Testing SSH connection..."
-        echo "Testing connection to ${{ secrets.DROPLET_USER }}@${{ secrets.DROPLET_IP }}"
+        echo "Testing connection to $DROPLET_USER@$DROPLET_IP"
         
         # Test basic connectivity
-        ping -c 3 ${{ secrets.DROPLET_IP }} || echo "❌ Ping failed"
+        ping -c 3 $DROPLET_IP || echo "❌ Ping failed"
         
         # Test SSH connection (without executing commands)
-        ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${{ secrets.DROPLET_USER }}@${{ secrets.DROPLET_IP }} "echo 'SSH connection successful'" || echo "❌ SSH connection failed"
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -o ConnectTimeout=10 $DROPLET_USER@$DROPLET_IP "echo 'SSH connection successful'" || echo "❌ SSH connection failed"
         
     - name: Check if script exists
       run: |
@@ -58,16 +72,16 @@ jobs:
       run: |
         echo "📤 Copying fix script to droplet..."
         echo "Source: $(pwd)/fix_ingestion_service.sh"
-        echo "Destination: ${{ secrets.DROPLET_USER }}@${{ secrets.DROPLET_IP }}:/home/${{ secrets.DROPLET_USER }}/"
+        echo "Destination: $DROPLET_USER@$DROPLET_IP:/root/"
         
-        scp -o StrictHostKeyChecking=no -v fix_ingestion_service.sh ${{ secrets.DROPLET_USER }}@${{ secrets.DROPLET_IP }}:/home/${{ secrets.DROPLET_USER }}/
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -v fix_ingestion_service.sh $DROPLET_USER@$DROPLET_IP:/root/
         
     - name: Run fix script on droplet
       run: |
         echo "🔧 Running ingestion service fix on droplet..."
-        echo "Connecting to: ${{ secrets.DROPLET_USER }}@${{ secrets.DROPLET_IP }}"
+        echo "Connecting to: $DROPLET_USER@$DROPLET_IP"
         
-        ssh -o StrictHostKeyChecking=no ${{ secrets.DROPLET_USER }}@${{ secrets.DROPLET_IP }} << 'EOF'
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP << 'EOF'
           echo "🔍 Current directory: $(pwd)"
           echo "🔍 Listing files:"
           ls -la
@@ -85,12 +99,12 @@ jobs:
     - name: Clean up script
       run: |
         echo "🧹 Cleaning up script from droplet..."
-        ssh -o StrictHostKeyChecking=no ${{ secrets.DROPLET_USER }}@${{ secrets.DROPLET_IP }} "rm -f /home/${{ secrets.DROPLET_USER }}/fix_ingestion_service.sh"
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP "rm -f /root/fix_ingestion_service.sh"
         
     - name: Verify fix results
       run: |
         echo "✅ Verifying fix results..."
-        ssh -o StrictHostKeyChecking=no ${{ secrets.DROPLET_USER }}@${{ secrets.DROPLET_IP }} << 'EOF'
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP << 'EOF'
           echo "📊 Checking pod status..."
           kubectl get pods -n my-briefings
           
