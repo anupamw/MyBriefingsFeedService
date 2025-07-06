@@ -53,9 +53,9 @@ def init_database():
     Base.metadata.create_all(bind=engine)
     
     # Initialize default data sources
-    init_default_data_sources()
+    init_default_data_sources(DataSource)
 
-def init_default_data_sources():
+def init_default_data_sources(DataSource):
     """Initialize default data sources"""
     db = SessionLocal()
     try:
