@@ -36,8 +36,7 @@ celery_app.conf.update(
     result_serializer="json",
     
     # Task execution
-    task_always_eager=False,  # Set to True for testing
-    task_eager_propagates=True,
+    # task_always_eager is set above for testing
     
     # Worker configuration
     worker_prefetch_multiplier=1,
