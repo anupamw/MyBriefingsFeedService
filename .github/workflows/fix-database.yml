@@ -31,38 +31,45 @@ jobs:
         ssh-keyscan -H $DROPLET_IP >> ~/.ssh/known_hosts
         echo "SSH setup complete"
         
-    - name: Copy fix script to droplet
+    - name: Copy fix scripts to droplet
       run: |
-        echo "📤 Copying database fix script to droplet..."
+        echo "📤 Copying database fix scripts to droplet..."
         echo "🔍 Current directory: $(pwd)"
         echo "🔍 Listing files in current directory:"
         ls -la
-        echo "🔍 Checking if fix_database_simple.sh exists:"
-        if [ -f "fix_database_simple.sh" ]; then
-          echo "✅ fix_database_simple.sh exists"
-          echo "📄 File size: $(wc -c < fix_database_simple.sh) bytes"
+        echo "🔍 Checking if fix scripts exist:"
+        if [ -f "fix_database_comprehensive.sh" ]; then
+          echo "✅ fix_database_comprehensive.sh exists"
+          echo "📄 File size: $(wc -c < fix_database_comprehensive.sh) bytes"
         else
-          echo "❌ fix_database_simple.sh does not exist"
+          echo "❌ fix_database_comprehensive.sh does not exist"
           exit 1
         fi
-        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no fix_database_simple.sh $DROPLET_USER@$DROPLET_IP:/root/
+        if [ -f "fix_database_comprehensive.sql" ]; then
+          echo "✅ fix_database_comprehensive.sql exists"
+          echo "📄 File size: $(wc -c < fix_database_comprehensive.sql) bytes"
+        else
+          echo "❌ fix_database_comprehensive.sql does not exist"
+          exit 1
+        fi
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no fix_database_comprehensive.sh fix_database_comprehensive.sql $DROPLET_USER@$DROPLET_IP:/root/
         
     - name: Run database fix
       run: |
-        echo "🔧 Running database schema fix..."
+        echo "🔧 Running comprehensive database schema fix..."
         ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP << 'EOF'
           echo "🔍 Current directory: $(pwd)"
           echo "🔍 Making script executable..."
-          chmod +x fix_database_simple.sh
+          chmod +x fix_database_comprehensive.sh
           
-          echo "🔍 Running database fix..."
-          ./fix_database_simple.sh
+          echo "🔍 Running comprehensive database fix..."
+          ./fix_database_comprehensive.sh
         EOF
         
-    - name: Clean up script
+    - name: Clean up scripts
       run: |
-        echo "🧹 Cleaning up script from droplet..."
-        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP "rm -f /root/fix_database_simple.sh"
+        echo "🧹 Cleaning up scripts from droplet..."
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP "rm -f /root/fix_database_comprehensive.sh /root/fix_database_comprehensive.sql"
         
     - name: Verify fix results
       run: |
