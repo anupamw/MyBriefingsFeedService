@@ -238,6 +238,7 @@ jobs:
           kubectl apply -f ~/k8s/ingestion-service.yaml
           kubectl apply -f ~/k8s/celery-worker-deployment.yaml
           kubectl apply -f ~/k8s/celery-beat-deployment.yaml
+          kubectl apply -f ~/k8s/ingress.yaml
           
           echo "🔄 Rolling out deployments..."
           kubectl rollout restart deployment/my-briefings-app -n my-briefings
