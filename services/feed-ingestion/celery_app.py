@@ -23,7 +23,7 @@ celery_app = Celery(
 # Celery configuration
 celery_app.conf.update(
     # Enable eager execution for debugging
-    task_always_eager=False,
+    task_always_eager=True,  # Enable for testing
     task_eager_propagates=True,
     # Task routing
     task_routes={
