@@ -1,0 +1,75 @@
+name: Fix Database Schema
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_fix:
+        description: 'Run the database schema fix'
+        required: true
+        default: true
+        type: boolean
+
+env:
+  DROPLET_IP: ${{ secrets.DIGITALOCEAN_HOST }}
+  DROPLET_USER: root
+  SSH_PRIVATE_KEY: ${{ secrets.DIGITALOCEAN_SSH_KEY }}
+
+jobs:
+  fix-database:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup SSH
+      run: |
+        echo "🔧 Setting up SSH..."
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H $DROPLET_IP >> ~/.ssh/known_hosts
+        echo "SSH setup complete"
+        
+    - name: Copy fix script to droplet
+      run: |
+        echo "📤 Copying database fix script to droplet..."
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no fix_database_simple.sh $DROPLET_USER@$DROPLET_IP:/root/
+        
+    - name: Run database fix
+      run: |
+        echo "🔧 Running database schema fix..."
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP << 'EOF'
+          echo "🔍 Current directory: $(pwd)"
+          echo "🔍 Making script executable..."
+          chmod +x fix_database_simple.sh
+          
+          echo "🔍 Running database fix..."
+          ./fix_database_simple.sh
+        EOF
+        
+    - name: Clean up script
+      run: |
+        echo "🧹 Cleaning up script from droplet..."
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP "rm -f /root/fix_database_simple.sh"
+        
+    - name: Verify fix results
+      run: |
+        echo "✅ Verifying fix results..."
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP << 'EOF'
+          echo "📊 Checking database tables..."
+          psql "postgresql://fastapi:password@64.227.134.87:5432/briefings_feed" -c "\d feed_items"
+          
+          echo ""
+          echo "📊 Testing ingestion endpoints..."
+          echo "Testing feed items endpoint..."
+          curl -s http://64.227.134.87:30101/feed-items?limit=3 | jq '.'
+          
+          echo ""
+          echo "Testing stats endpoint..."
+          curl -s http://64.227.134.87:30101/stats | jq '.'
+          
+          echo ""
+          echo "Testing user categories endpoint..."
+          curl -s http://64.227.134.87:30101/user-categories/1 | jq '.'
+        EOF 
