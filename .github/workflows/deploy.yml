@@ -169,6 +169,10 @@ jobs:
         echo "📤 Copying setup script..."
         scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no scripts/setup-env.sh $DROPLET_USER@$DROPLET_IP:~/
         echo "✅ Setup script copied successfully"
+        
+        echo "📤 Copying log aggregator script..."
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no scripts/log-aggregator.sh $DROPLET_USER@$DROPLET_IP:~/
+        echo "✅ Log aggregator script copied successfully"
     
     - name: Deploy to k3s
       run: |
@@ -261,6 +265,11 @@ jobs:
           kubectl get pods -n my-briefings
           
           echo "✅ Deployment completed successfully!"
+          
+          echo "📊 Setting up log aggregator..."
+          chmod +x ~/log-aggregator.sh
+          mkdir -p /var/log/my-briefings
+          echo "✅ Log aggregator setup completed!"
         EOF
     
     - name: Health check
