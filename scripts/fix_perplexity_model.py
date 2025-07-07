@@ -29,12 +29,12 @@ def fix_perplexity_model():
             
             # Update the model name
             if perplexity_source.config:
-                perplexity_source.config["model"] = "pplx-7b-online"
+                perplexity_source.config["model"] = "sonar"
             else:
-                perplexity_source.config = {"model": "pplx-7b-online"}
+                perplexity_source.config = {"model": "sonar"}
             
             db.commit()
-            print("✅ Updated Perplexity model name to 'pplx-7b-online'")
+            print("✅ Updated Perplexity model name to 'sonar'")
             print(f"New config: {perplexity_source.config}")
         else:
             print("❌ Perplexity data source not found")

@@ -72,7 +72,7 @@ def init_default_data_sources(DataSource):
                 "base_url": "https://api.perplexity.ai",
                 "rate_limit_per_minute": 10,
                 "config": {
-                    "model": "pplx-7b-online",
+                    "model": "sonar",
                     "max_tokens": 1000
                 }
             },

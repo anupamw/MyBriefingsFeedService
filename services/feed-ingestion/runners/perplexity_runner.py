@@ -35,7 +35,7 @@ class PerplexityRunner:
                 display_name="Perplexity AI",
                 base_url=self.base_url,
                 rate_limit_per_minute=60,
-                config={"model": "pplx-7b-online"}
+                config={"model": "sonar"}
             )
             self.db.add(data_source)
             self.db.commit()
@@ -129,7 +129,7 @@ class PerplexityRunner:
         self.db.add(cache_entry)
         self.db.commit()
     
-    def query_perplexity(self, query: str, model: str = "pplx-7b-online") -> Optional[Dict]:
+    def query_perplexity(self, query: str, model: str = "sonar") -> Optional[Dict]:
         """Query Perplexity API"""
         if not self.api_key:
             print("PERPLEXITY_API_KEY not found in environment")
