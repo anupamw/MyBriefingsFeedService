@@ -191,7 +191,6 @@ class Item(BaseModel):
 
 class FeedItem(BaseModel):
     id: int
-    title: str
     summary: Optional[str] = None
     content: Optional[str] = None
     url: Optional[str] = None
@@ -572,6 +571,7 @@ async def root():
                         <input type="text" id="new-category" placeholder="Enter category name (max 140 chars)" maxlength="140">
                         <button onclick="addCategory()">Add Category</button>
                     </div>
+                    <button id="refresh-briefings-btn" style="margin-top:20px;width:100%;background:#667eea;color:white;border:none;border-radius:6px;padding:10px;font-size:14px;cursor:pointer;" onclick="refreshBriefings()">Refresh my briefings</button>
                 </div>
                 
                 <div class="feed-content">
@@ -781,16 +781,34 @@ async def root():
                 items.forEach(item => {
                     const itemDiv = document.createElement('div');
                     itemDiv.className = 'feed-item';
+                    let published = '';
+                    let age = '';
+                    if (item.published_at) {
+                        const publishedDate = new Date(item.published_at);
+                        published = publishedDate.toLocaleString();
+                        age = timeAgo(publishedDate);
+                    }
                     itemDiv.innerHTML = `
-                        <div class="feed-title">${item.title}</div>
                         <div class="feed-summary">${item.summary || ''}</div>
                         <div class="feed-meta">
                             <span>Source: ${item.source || 'Unknown'}</span>
-                            <span>${item.published_at ? new Date(item.published_at).toLocaleDateString() : ''}</span>
+                            <span>${published}${age ? ' (' + age + ')' : ''}</span>
                         </div>
                     `;
                     container.appendChild(itemDiv);
                 });
+            }
+
+            function timeAgo(date) {
+                const now = new Date();
+                const seconds = Math.floor((now - date) / 1000);
+                if (seconds < 60) return `${seconds} seconds ago`;
+                const minutes = Math.floor(seconds / 60);
+                if (minutes < 60) return `${minutes} minutes ago`;
+                const hours = Math.floor(minutes / 60);
+                if (hours < 24) return `${hours} hours ago`;
+                const days = Math.floor(hours / 24);
+                return `${days} days ago`;
             }
             
             function logout() {
@@ -859,6 +877,27 @@ async def root():
                     activeForm.appendChild(successDiv);
                 }
                 successDiv.textContent = message;
+            }
+
+            async function refreshBriefings() {
+                const token = localStorage.getItem('token');
+                if (!token) return;
+                try {
+                    const response = await fetch('/ingest/perplexity', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    if (response.ok) {
+                        showSuccess('Briefings refresh triggered!');
+                    } else {
+                        const data = await response.json();
+                        showError(data.detail || 'Failed to trigger refresh.');
+                    }
+                } catch (error) {
+                    showError('Failed to trigger refresh.');
+                }
             }
         </script>
     </body>
@@ -936,7 +975,7 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     )
 
 @app.get("/feed", response_model=List[FeedItem])
-async def get_feed(limit: int = 10, offset: int = 0, current_user: dict = Depends(get_current_user)):
+async def get_feed(limit: int = 25, offset: int = 0, current_user: dict = Depends(get_current_user)):
     """Get feed items with pagination (protected route)"""
     db = SessionLocal()
     
@@ -949,7 +988,6 @@ async def get_feed(limit: int = 10, offset: int = 0, current_user: dict = Depend
     for item in items:
         result.append(FeedItem(
             id=item.id,
-            title=item.title,
             summary=item.summary,
             content=item.content,
             url=item.url,
@@ -974,7 +1012,6 @@ async def get_feed_item(item_id: int, current_user: dict = Depends(get_current_u
     
     return FeedItem(
         id=item.id,
-        title=item.title,
         summary=item.summary,
         content=item.content,
         url=item.url,
