@@ -22,8 +22,8 @@ celery_app = Celery(
 
 # Celery configuration
 celery_app.conf.update(
-    # Enable eager execution for debugging
-    task_always_eager=True,  # Enable for testing
+    # Disable eager execution for production/distributed mode
+    task_always_eager=False,  # Must be False so tasks are sent to the broker
     task_eager_propagates=True,
     # Task routing
     task_routes={
