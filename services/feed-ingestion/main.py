@@ -6,6 +6,7 @@ import uvicorn
 from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
+import json
 
 # Import shared components
 import sys
@@ -86,6 +87,19 @@ def get_db():
         yield db
     finally:
         db.close()
+
+def parse_tags(tags_data):
+    """Parse tags from database, handling both JSON strings and lists"""
+    if tags_data is None:
+        return []
+    if isinstance(tags_data, list):
+        return tags_data
+    if isinstance(tags_data, str):
+        try:
+            return json.loads(tags_data)
+        except (json.JSONDecodeError, TypeError):
+            return []
+    return []
 
 @app.on_event("startup")
 async def startup_event():
@@ -320,7 +334,7 @@ async def get_feed_items(
             created_at=item.created_at.isoformat(),
             category=item.category,
             engagement_score=item.engagement_score,
-            tags=item.tags
+            tags=parse_tags(item.tags)
         )
         for item in items
     ]
@@ -363,7 +377,7 @@ async def get_user_feed_items(
             created_at=item.created_at.isoformat(),
             category=item.category,
             engagement_score=item.engagement_score,
-            tags=item.tags
+            tags=parse_tags(item.tags)
         )
         for item in items
     ]
