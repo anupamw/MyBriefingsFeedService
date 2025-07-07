@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from celery import current_task
 from dotenv import load_dotenv
-from celery import group
+from celery import group, chord
 
 # Import shared components
 import sys
@@ -369,6 +369,36 @@ def ingest_perplexity(self, user_id: Optional[int] = None, queries: List[Dict[st
         runner.db.close()
 
 @celery_app.task(bind=True)
+def aggregate_perplexity_results(self, results, job_id, total_users):
+    """Callback to aggregate results from all user ingestions and update the job record."""
+    from shared.database.connection import SessionLocal
+    from shared.models.database_models import IngestionJob
+    db = SessionLocal()
+    job = db.query(IngestionJob).filter(IngestionJob.id == job_id).first()
+    total_created = 0
+    total_updated = 0
+    users_processed = 0
+    for user_result in results:
+        if user_result and "created" in user_result:
+            total_created += user_result["created"]
+            total_updated += user_result["updated"]
+            users_processed += 1
+    if job:
+        job.status = "completed"
+        job.completed_at = datetime.utcnow()
+        job.items_created = total_created
+        job.items_updated = total_updated
+        db.commit()
+    db.close()
+    return {
+        "status": "completed",
+        "created": total_created,
+        "updated": total_updated,
+        "users_processed": users_processed,
+        "total_users": total_users
+    }
+
+@celery_app.task(bind=True)
 def ingest_perplexity_for_all_users(self):
     """Celery task for Perplexity ingestion for all users with categories"""
     runner = PerplexityRunner()
@@ -385,10 +415,6 @@ def ingest_perplexity_for_all_users(self):
         UserCategory.is_active == True
     ).distinct().all()
     
-    total_created = 0
-    total_updated = 0
-    users_processed = 0
-    
     # Create ingestion job record
     job = IngestionJob(
         job_type="perplexity_all_users",
@@ -399,46 +425,31 @@ def ingest_perplexity_for_all_users(self):
     )
     runner.db.add(job)
     runner.db.commit()
+    job_id = job.id
+    total_users = len(users_with_categories)
+    runner.db.close()
     
     try:
-        # Launch all user ingestions in parallel using a group
+        # Launch all user ingestions in parallel using a chord
         tasks = [ingest_perplexity.s(user.id) for user in users_with_categories]
-        job_group = group(tasks)
-        result_group = job_group.apply_async()
-        results = result_group.get(timeout=600)  # Wait for all to finish (10 min timeout)
-        
-        for user_result in results:
-            if user_result and "created" in user_result:
-                total_created += user_result["created"]
-                total_updated += user_result["updated"]
-                users_processed += 1
-        
-        # Update job record
-        job.status = "completed"
-        job.completed_at = datetime.utcnow()
-        job.items_created = total_created
-        job.items_updated = total_updated
-        runner.db.commit()
-        
+        job_chord = chord(tasks)(aggregate_perplexity_results.s(job_id, total_users))
         return {
-            "status": "completed",
-            "created": total_created,
-            "updated": total_updated,
-            "users_processed": users_processed,
-            "total_users": len(users_with_categories)
+            "message": "Perplexity ingestion for all users started",
+            "job_id": job_id,
+            "total_users": total_users,
+            "chord_id": job_chord.id
         }
-        
     except Exception as e:
         # Update job record with error
-        job.status = "failed"
-        job.completed_at = datetime.utcnow()
-        job.error_message = str(e)
-        runner.db.commit()
-        
-        raise self.retry(countdown=60, max_retries=3)
-    
-    finally:
+        runner.db = SessionLocal()
+        job = runner.db.query(IngestionJob).filter(IngestionJob.id == job_id).first()
+        if job:
+            job.status = "failed"
+            job.completed_at = datetime.utcnow()
+            job.error_message = str(e)
+            runner.db.commit()
         runner.db.close()
+        raise self.retry(countdown=60, max_retries=3)
 
 if __name__ == "__main__":
     # Test the runner
