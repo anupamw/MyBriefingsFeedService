@@ -408,48 +408,24 @@ def ingest_perplexity_for_all_users(self):
         print("Perplexity data source not found or inactive")
         return {"error": "Data source not found"}
     
-    # Get all users with categories (explicit join)
-    users_with_categories = runner.db.query(UserDB).join(
+    # Get all user IDs with categories (explicit join)
+    user_id_rows = runner.db.query(UserDB.id).join(
         UserCategory, UserDB.id == UserCategory.user_id
     ).filter(
         UserCategory.is_active == True
     ).distinct().all()
+    user_ids = [user_id for (user_id,) in user_id_rows]
     
-    # Create ingestion job record
-    job = IngestionJob(
-        job_type="perplexity_all_users",
-        status="running",
-        started_at=datetime.utcnow(),
-        parameters={"users_count": len(users_with_categories)},
-        data_source_id=data_source.id
-    )
-    runner.db.add(job)
-    runner.db.commit()
-    job_id = job.id
-    total_users = len(users_with_categories)
-    runner.db.close()
+    if not user_ids:
+        print("No users with active categories found.")
+        return {"status": "no_users"}
     
-    try:
-        # Launch all user ingestions in parallel using a chord
-        tasks = [ingest_perplexity.s(user.id) for user in users_with_categories]
-        job_chord = chord(tasks)(aggregate_perplexity_results.s(job_id, total_users))
-        return {
-            "message": "Perplexity ingestion for all users started",
-            "job_id": job_id,
-            "total_users": total_users,
-            "chord_id": job_chord.id
-        }
-    except Exception as e:
-        # Update job record with error
-        runner.db = SessionLocal()
-        job = runner.db.query(IngestionJob).filter(IngestionJob.id == job_id).first()
-        if job:
-            job.status = "failed"
-            job.completed_at = datetime.utcnow()
-            job.error_message = str(e)
-            runner.db.commit()
-        runner.db.close()
-        raise self.retry(countdown=60, max_retries=3)
+    # Create a group of ingestion tasks for all user IDs
+    tasks = [ingest_perplexity.s(user_id) for user_id in user_ids]
+    job_id = runner.create_ingestion_job_record("perplexity_all_users")
+    chord(group(tasks), aggregate_perplexity_results.s(job_id, len(user_ids))).apply_async()
+    print(f"Triggered Perplexity ingestion for {len(user_ids)} users (job_id={job_id})")
+    return {"status": "started", "users": len(user_ids), "job_id": job_id}
 
 if __name__ == "__main__":
     # Test the runner
