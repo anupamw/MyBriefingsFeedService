@@ -466,5 +466,31 @@ async def debug_perplexity_model(db: SessionLocal = Depends(get_db)):
     except Exception as e:
         return {"error": f"Failed to check/fix Perplexity model: {str(e)}"}
 
+@app.get("/debug/test-perplexity-api")
+async def debug_test_perplexity_api():
+    """Debug endpoint to test Perplexity API directly"""
+    try:
+        from runners.perplexity_runner import PerplexityRunner
+        
+        runner = PerplexityRunner()
+        
+        # Test a simple query
+        result = runner.query_perplexity("What are the top technology news stories today?")
+        
+        if result:
+            return {
+                "message": "Perplexity API test successful",
+                "has_result": True,
+                "result_keys": list(result.keys()) if result else None
+            }
+        else:
+            return {
+                "message": "Perplexity API test failed",
+                "has_result": False
+            }
+            
+    except Exception as e:
+        return {"error": f"Failed to test Perplexity API: {str(e)}"}
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001) 
