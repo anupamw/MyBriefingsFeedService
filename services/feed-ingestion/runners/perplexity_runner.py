@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from celery import current_task
 from dotenv import load_dotenv
+from celery import group
 
 # Import shared components
 import sys
@@ -400,21 +401,13 @@ def ingest_perplexity_for_all_users(self):
     runner.db.commit()
     
     try:
-        for user in users_with_categories:
-            # Update task progress
-            self.update_state(
-                state="PROGRESS",
-                meta={
-                    "current_user": user.username,
-                    "processed_users": users_processed + 1,
-                    "total_users": len(users_with_categories)
-                }
-            )
-            
-            # Ingest for this user
-            result = ingest_perplexity.delay(user.id)
-            user_result = result.get(timeout=300)  # 5 minute timeout per user
-            
+        # Launch all user ingestions in parallel using a group
+        tasks = [ingest_perplexity.s(user.id) for user in users_with_categories]
+        job_group = group(tasks)
+        result_group = job_group.apply_async()
+        results = result_group.get(timeout=600)  # Wait for all to finish (10 min timeout)
+        
+        for user_result in results:
             if user_result and "created" in user_result:
                 total_created += user_result["created"]
                 total_updated += user_result["updated"]
