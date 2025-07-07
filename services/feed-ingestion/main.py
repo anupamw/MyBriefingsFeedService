@@ -103,8 +103,14 @@ def parse_tags(tags_data):
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database on startup"""
+    """Initialize database on startup and trigger full ingestion for all users"""
     init_database()
+    try:
+        from celery_app import celery_app
+        celery_app.send_task("runners.perplexity_runner.ingest_perplexity_for_all_users")
+        print("Triggered full Perplexity ingestion for all users on startup.")
+    except Exception as e:
+        print(f"Failed to trigger full ingestion on startup: {e}")
 
 @app.get("/ingestion/health")
 async def health_check():
