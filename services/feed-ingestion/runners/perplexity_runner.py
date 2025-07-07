@@ -273,6 +273,21 @@ class PerplexityRunner:
         self.db.commit()
         return {"created": created, "updated": updated}
 
+    def create_ingestion_job_record(self, job_type):
+        from shared.database.connection import SessionLocal
+        from shared.models.database_models import IngestionJob
+        db = SessionLocal()
+        job = IngestionJob(
+            job_type=job_type,
+            status="running",
+            started_at=datetime.utcnow()
+        )
+        db.add(job)
+        db.commit()
+        job_id = job.id
+        db.close()
+        return job_id
+
 @celery_app.task(bind=True)
 def ingest_perplexity(self, user_id: Optional[int] = None, queries: List[Dict[str, Any]] = None):
     """Celery task for Perplexity ingestion with personalized queries"""
