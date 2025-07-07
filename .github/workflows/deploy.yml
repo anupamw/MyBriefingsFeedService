@@ -218,19 +218,24 @@ jobs:
             PERPLEXITY_API_KEY=$(grep "^PERPLEXITY_API_KEY=" ~/.env | cut -d'=' -f2- | tr -d '"' | tr -d "'")
             if [ -n "$PERPLEXITY_API_KEY" ]; then
               echo "✅ PERPLEXITY_API_KEY found in .env (length: ${#PERPLEXITY_API_KEY})"
+              # Base64 encode for Kubernetes secret
+              ENCODED_KEY=$(echo -n "$PERPLEXITY_API_KEY" | base64)
+              echo "✅ API key encoded for Kubernetes secret"
             else
               echo "⚠️  Warning: PERPLEXITY_API_KEY not found in .env, using empty value"
-              PERPLEXITY_API_KEY=""
+              ENCODED_KEY=""
             fi
           else
             echo "⚠️  Warning: .env file not found on droplet, using empty value"
-            PERPLEXITY_API_KEY=""
+            ENCODED_KEY=""
           fi
           
-          kubectl create secret generic api-secrets \
+          # Create the api-keys secret using kubectl create
+          kubectl create secret generic api-keys \
             --namespace=my-briefings \
             --from-literal=perplexity-api-key="$PERPLEXITY_API_KEY" \
             --dry-run=client -o yaml | kubectl apply -f -
+          echo "✅ Kubernetes secret 'api-keys' created/updated"
           
           kubectl apply -f ~/k8s/deployment.yaml
           kubectl apply -f ~/k8s/service.yaml
