@@ -270,6 +270,17 @@ jobs:
           chmod +x ~/log-aggregator.sh
           mkdir -p /var/log/my-briefings
           echo "✅ Log aggregator setup completed!"
+          
+          echo "🔧 Fixing Perplexity model name in database..."
+          # Copy the fix script to the droplet
+          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no scripts/fix_perplexity_model.py $DROPLET_USER@$DROPLET_IP:~/
+          
+          # Run the fix script
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP << 'FIX_EOF'
+            cd ~
+            python3 fix_perplexity_model.py
+          FIX_EOF
+          echo "✅ Perplexity model fix completed!"
         EOF
     
     - name: Health check
