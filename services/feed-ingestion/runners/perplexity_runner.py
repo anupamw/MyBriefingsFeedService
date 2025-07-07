@@ -377,8 +377,10 @@ def ingest_perplexity_for_all_users(self):
         print("Perplexity data source not found or inactive")
         return {"error": "Data source not found"}
     
-    # Get all users with categories
-    users_with_categories = runner.db.query(UserDB).join(UserCategory).filter(
+    # Get all users with categories (explicit join)
+    users_with_categories = runner.db.query(UserDB).join(
+        UserCategory, UserDB.id == UserCategory.user_id
+    ).filter(
         UserCategory.is_active == True
     ).distinct().all()
     
