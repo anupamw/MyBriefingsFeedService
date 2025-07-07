@@ -197,6 +197,7 @@ class FeedItem(BaseModel):
     source: Optional[str] = None
     published_at: Optional[str] = None
     created_at: Optional[str] = None
+    category: Optional[str] = None
 
 class UserCategory(BaseModel):
     id: int
@@ -576,6 +577,7 @@ async def root():
                 
                 <div class="feed-content">
                     <div id="feed-items"></div>
+                    <div id="pagination-controls" style="display:flex;justify-content:center;gap:10px;margin-top:20px;"></div>
                 </div>
             </div>
         </div>
@@ -646,20 +648,23 @@ async def root():
                 }
             }
             
-            async function showFeed() {
+            let currentOffset = 0;
+            const FEED_LIMIT = 100;
+
+            async function showFeed(offset = 0) {
                 const token = localStorage.getItem('token');
                 if (!token) return;
-                
+                currentOffset = offset;
                 try {
-                    const response = await fetch('/feed', {
+                    const response = await fetch(`/feed?limit=${FEED_LIMIT}&offset=${offset}`, {
                         headers: {
                             'Authorization': `Bearer ${token}`
                         }
                     });
-                    
                     if (response.ok) {
                         const feedItems = await response.json();
                         displayFeed(feedItems);
+                        updatePaginationControls(feedItems.length);
                         loadCategories();
                         document.getElementById('auth-container').style.display = 'none';
                         document.getElementById('feed-container').style.display = 'block';
@@ -670,6 +675,21 @@ async def root():
                 } catch (error) {
                     showError('Failed to load feed.');
                 }
+            }
+
+            function updatePaginationControls(feedLength) {
+                const controls = document.getElementById('pagination-controls');
+                controls.innerHTML = '';
+                const prevBtn = document.createElement('button');
+                prevBtn.textContent = 'Previous';
+                prevBtn.disabled = currentOffset === 0;
+                prevBtn.onclick = () => showFeed(Math.max(0, currentOffset - FEED_LIMIT));
+                controls.appendChild(prevBtn);
+                const nextBtn = document.createElement('button');
+                nextBtn.textContent = 'Next';
+                nextBtn.disabled = feedLength < FEED_LIMIT;
+                nextBtn.onclick = () => showFeed(currentOffset + FEED_LIMIT);
+                controls.appendChild(nextBtn);
             }
             
             async function loadCategories() {
@@ -789,6 +809,7 @@ async def root():
                         age = timeAgo(publishedDate);
                     }
                     itemDiv.innerHTML = `
+                        <div class="feed-category" style="font-weight:600;color:#667eea;margin-bottom:4px;">${item.category || 'Uncategorized'}</div>
                         <div class="feed-summary">${item.summary || ''}</div>
                         <div class="feed-meta">
                             <span>Source: ${item.source || 'Unknown'}</span>
@@ -975,15 +996,13 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     )
 
 @app.get("/feed", response_model=List[FeedItem])
-async def get_feed(limit: int = 25, offset: int = 0, current_user: dict = Depends(get_current_user)):
+async def get_feed(limit: int = 100, offset: int = 0, current_user: dict = Depends(get_current_user)):
     """Get feed items with pagination (protected route)"""
     db = SessionLocal()
-    
     items = db.query(FeedItemDB).order_by(
         FeedItemDB.published_at.desc(),
         FeedItemDB.created_at.desc()
     ).offset(offset).limit(limit).all()
-    
     result = []
     for item in items:
         result.append(FeedItem(
@@ -993,9 +1012,9 @@ async def get_feed(limit: int = 25, offset: int = 0, current_user: dict = Depend
             url=item.url,
             source=item.source,
             published_at=item.published_at.isoformat() if item.published_at else None,
-            created_at=item.created_at.isoformat() if item.created_at else None
+            created_at=item.created_at.isoformat() if item.created_at else None,
+            category=getattr(item, 'category', None)
         ))
-    
     db.close()
     return result
 
