@@ -425,5 +425,46 @@ async def get_task_status(task_id: str):
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Task not found: {str(e)}")
 
+@app.get("/debug/perplexity-model")
+async def debug_perplexity_model(db: SessionLocal = Depends(get_db)):
+    """Debug endpoint to check and fix Perplexity model name"""
+    try:
+        # Find the Perplexity data source
+        perplexity_source = db.query(DataSource).filter(
+            DataSource.name == "perplexity"
+        ).first()
+        
+        if not perplexity_source:
+            return {"error": "Perplexity data source not found"}
+        
+        current_config = perplexity_source.config or {}
+        current_model = current_config.get("model", "not set")
+        
+        # Check if model needs to be updated
+        if current_model != "sonar":
+            # Update the model name
+            if perplexity_source.config:
+                perplexity_source.config["model"] = "sonar"
+            else:
+                perplexity_source.config = {"model": "sonar"}
+            
+            db.commit()
+            
+            return {
+                "message": "Perplexity model name updated",
+                "old_model": current_model,
+                "new_model": "sonar",
+                "config": perplexity_source.config
+            }
+        else:
+            return {
+                "message": "Perplexity model name is already correct",
+                "current_model": current_model,
+                "config": perplexity_source.config
+            }
+            
+    except Exception as e:
+        return {"error": f"Failed to check/fix Perplexity model: {str(e)}"}
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001) 
