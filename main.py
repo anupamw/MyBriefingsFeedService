@@ -649,14 +649,20 @@ async def root():
             }
             
             let currentOffset = 0;
-            const FEED_LIMIT = 100;
+            const FEED_LIMIT = 25;
+            let currentCategoryFilter = null;
 
-            async function showFeed(offset = 0) {
+            async function showFeed(offset = 0, categoryFilter = null) {
                 const token = localStorage.getItem('token');
                 if (!token) return;
                 currentOffset = offset;
+                currentCategoryFilter = categoryFilter;
                 try {
-                    const response = await fetch(`/feed?limit=${FEED_LIMIT}&offset=${offset}`, {
+                    let url = `/feed?limit=${FEED_LIMIT}&offset=${offset}`;
+                    if (categoryFilter) {
+                        url += `&category=${encodeURIComponent(categoryFilter)}`;
+                    }
+                    const response = await fetch(url, {
                         headers: {
                             'Authorization': `Bearer ${token}`
                         }
@@ -683,12 +689,12 @@ async def root():
                 const prevBtn = document.createElement('button');
                 prevBtn.textContent = 'Previous';
                 prevBtn.disabled = currentOffset === 0;
-                prevBtn.onclick = () => showFeed(Math.max(0, currentOffset - FEED_LIMIT));
+                prevBtn.onclick = () => showFeed(Math.max(0, currentOffset - FEED_LIMIT), currentCategoryFilter);
                 controls.appendChild(prevBtn);
                 const nextBtn = document.createElement('button');
                 nextBtn.textContent = 'Next';
                 nextBtn.disabled = feedLength < FEED_LIMIT;
-                nextBtn.onclick = () => showFeed(currentOffset + FEED_LIMIT);
+                nextBtn.onclick = () => showFeed(currentOffset + FEED_LIMIT, currentCategoryFilter);
                 controls.appendChild(nextBtn);
             }
             
@@ -798,6 +804,17 @@ async def root():
                 const container = document.getElementById('feed-items');
                 container.innerHTML = '';
                 
+                // Add category filter header if filtering
+                if (currentCategoryFilter) {
+                    const filterHeader = document.createElement('div');
+                    filterHeader.style.cssText = 'background:#f8f9fa;padding:15px;border-radius:10px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;';
+                    filterHeader.innerHTML = `
+                        <span style="font-weight:600;color:#333;">Showing feeds from: <span style="color:#667eea;">${currentCategoryFilter}</span></span>
+                        <button onclick="clearCategoryFilter()" style="background:#ff4757;color:white;border:none;border-radius:5px;padding:8px 12px;cursor:pointer;">Clear Filter</button>
+                    `;
+                    container.appendChild(filterHeader);
+                }
+                
                 items.forEach(item => {
                     const itemDiv = document.createElement('div');
                     itemDiv.className = 'feed-item';
@@ -809,7 +826,7 @@ async def root():
                         age = timeAgo(publishedDate);
                     }
                     itemDiv.innerHTML = `
-                        <div class="feed-category" style="font-weight:600;color:#667eea;margin-bottom:4px;">${item.category || 'Uncategorized'}</div>
+                        <div class="feed-category" style="font-weight:600;color:#667eea;margin-bottom:4px;cursor:pointer;text-decoration:underline;" onclick="filterByCategory('${item.category || 'Uncategorized'}')">${item.category || 'Uncategorized'}</div>
                         <div class="feed-summary">${item.summary || ''}</div>
                         <div class="feed-meta">
                             <span>Source: ${item.source || 'Unknown'}</span>
@@ -820,12 +837,20 @@ async def root():
                 });
             }
 
+            function filterByCategory(category) {
+                showFeed(0, category);
+            }
+
+            function clearCategoryFilter() {
+                showFeed(0, null);
+            }
+
             function timeAgo(date) {
                 const now = new Date();
                 const seconds = Math.floor((now - date) / 1000);
                 if (seconds < 60) return `${seconds} seconds ago`;
                 const minutes = Math.floor(seconds / 60);
-                if (minutes < 60) return `${minutes} minutes ago`;
+                if (minutes < 120) return `${minutes} minutes ago`; // Show minutes for anything less than 2 hours
                 const hours = Math.floor(minutes / 60);
                 if (hours < 24) return `${hours} hours ago`;
                 const days = Math.floor(hours / 24);
@@ -996,13 +1021,19 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     )
 
 @app.get("/feed", response_model=List[FeedItem])
-async def get_feed(limit: int = 100, offset: int = 0, current_user: dict = Depends(get_current_user)):
+async def get_feed(limit: int = 25, offset: int = 0, category: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     """Get feed items with pagination (protected route)"""
     db = SessionLocal()
-    items = db.query(FeedItemDB).order_by(
+    query = db.query(FeedItemDB).order_by(
         FeedItemDB.published_at.desc(),
         FeedItemDB.created_at.desc()
-    ).offset(offset).limit(limit).all()
+    )
+    
+    # Filter by category if specified
+    if category:
+        query = query.filter(FeedItemDB.category == category)
+    
+    items = query.offset(offset).limit(limit).all()
     result = []
     for item in items:
         result.append(FeedItem(
@@ -1013,7 +1044,7 @@ async def get_feed(limit: int = 100, offset: int = 0, current_user: dict = Depen
             source=item.source,
             published_at=item.published_at.isoformat() if item.published_at else None,
             created_at=item.created_at.isoformat() if item.created_at else None,
-            category=getattr(item, 'category', None)
+            category=item.category
         ))
     db.close()
     return result
