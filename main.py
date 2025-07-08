@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
@@ -1231,6 +1231,128 @@ async def delete_item(item_id: int):
             del items_db[i]
             return {"message": "Item deleted successfully"}
     raise HTTPException(status_code=404, detail="Item not found")
+
+# Feed data deletion APIs
+@app.delete("/feed/delete/user/{user_id}")
+async def delete_feed_data_for_user(
+    user_id: int, 
+    current_user: dict = Depends(get_current_user),
+    confirm: bool = Query(..., description="Must be true to confirm deletion")
+):
+    """Delete all feed data for a specific user (admin only)"""
+    # Check if current user is admin (you can modify this logic based on your admin criteria)
+    if current_user["id"] != 1:  # Assuming user ID 1 is admin
+        raise HTTPException(status_code=403, detail="Only admin users can delete feed data")
+    
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Must confirm deletion with confirm=true")
+    
+    db = SessionLocal()
+    try:
+        # Get user's categories
+        user_categories = db.query(UserCategoryDB).filter(
+            UserCategoryDB.user_id == user_id
+        ).all()
+        
+        category_names = [cat.category_name for cat in user_categories]
+        
+        # Delete feed items for user's categories
+        deleted_count = 0
+        if category_names:
+            deleted_count = db.query(FeedItemDB).filter(
+                FeedItemDB.category.in_(category_names)
+            ).delete()
+        
+        # Delete user's categories
+        categories_deleted = db.query(UserCategoryDB).filter(
+            UserCategoryDB.user_id == user_id
+        ).delete()
+        
+        db.commit()
+        
+        return {
+            "message": f"Successfully deleted feed data for user {user_id}",
+            "feed_items_deleted": deleted_count,
+            "categories_deleted": categories_deleted
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting feed data: {str(e)}")
+    finally:
+        db.close()
+
+@app.delete("/feed/delete/all")
+async def delete_all_feed_data(
+    current_user: dict = Depends(get_current_user),
+    confirm: bool = Query(..., description="Must be true to confirm deletion")
+):
+    """Delete all feed data for all users (admin only)"""
+    # Check if current user is admin
+    if current_user["id"] != 1:  # Assuming user ID 1 is admin
+        raise HTTPException(status_code=403, detail="Only admin users can delete all feed data")
+    
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Must confirm deletion with confirm=true")
+    
+    db = SessionLocal()
+    try:
+        # Delete all feed items
+        feed_items_deleted = db.query(FeedItemDB).delete()
+        
+        # Delete all user categories
+        categories_deleted = db.query(UserCategoryDB).delete()
+        
+        db.commit()
+        
+        return {
+            "message": "Successfully deleted all feed data",
+            "feed_items_deleted": feed_items_deleted,
+            "categories_deleted": categories_deleted
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting all feed data: {str(e)}")
+    finally:
+        db.close()
+
+@app.delete("/feed/delete/category/{category_name}")
+async def delete_feed_data_by_category(
+    category_name: str,
+    current_user: dict = Depends(get_current_user),
+    confirm: bool = Query(..., description="Must be true to confirm deletion")
+):
+    """Delete all feed data for a specific category (admin only)"""
+    # Check if current user is admin
+    if current_user["id"] != 1:  # Assuming user ID 1 is admin
+        raise HTTPException(status_code=403, detail="Only admin users can delete feed data by category")
+    
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Must confirm deletion with confirm=true")
+    
+    db = SessionLocal()
+    try:
+        # Delete feed items for the category
+        feed_items_deleted = db.query(FeedItemDB).filter(
+            FeedItemDB.category == category_name
+        ).delete()
+        
+        # Delete user categories with this name
+        categories_deleted = db.query(UserCategoryDB).filter(
+            UserCategoryDB.category_name == category_name
+        ).delete()
+        
+        db.commit()
+        
+        return {
+            "message": f"Successfully deleted feed data for category '{category_name}'",
+            "feed_items_deleted": feed_items_deleted,
+            "categories_deleted": categories_deleted
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting feed data: {str(e)}")
+    finally:
+        db.close()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 

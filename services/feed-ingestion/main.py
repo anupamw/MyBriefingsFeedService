@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -511,6 +511,108 @@ async def debug_test_perplexity_api():
             
     except Exception as e:
         return {"error": f"Failed to test Perplexity API: {str(e)}"}
+
+# Feed data deletion APIs
+@app.delete("/feed-items/delete/user/{user_id}")
+async def delete_feed_data_for_user(
+    user_id: int,
+    confirm: bool = Query(..., description="Must be true to confirm deletion"),
+    db: SessionLocal = Depends(get_db)
+):
+    """Delete all feed data for a specific user"""
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Must confirm deletion with confirm=true")
+    
+    try:
+        # Get user's categories
+        user_categories = db.query(UserCategory).filter(
+            UserCategory.user_id == user_id,
+            UserCategory.is_active == True
+        ).all()
+        
+        category_names = [cat.category_name for cat in user_categories]
+        
+        # Delete feed items for user's categories
+        deleted_count = 0
+        if category_names:
+            deleted_count = db.query(FeedItem).filter(
+                FeedItem.category.in_(category_names)
+            ).delete()
+        
+        # Delete user's categories
+        categories_deleted = db.query(UserCategory).filter(
+            UserCategory.user_id == user_id
+        ).delete()
+        
+        db.commit()
+        
+        return {
+            "message": f"Successfully deleted feed data for user {user_id}",
+            "feed_items_deleted": deleted_count,
+            "categories_deleted": categories_deleted
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting feed data: {str(e)}")
+
+@app.delete("/feed-items/delete/all")
+async def delete_all_feed_data(
+    confirm: bool = Query(..., description="Must be true to confirm deletion"),
+    db: SessionLocal = Depends(get_db)
+):
+    """Delete all feed data for all users"""
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Must confirm deletion with confirm=true")
+    
+    try:
+        # Delete all feed items
+        feed_items_deleted = db.query(FeedItem).delete()
+        
+        # Delete all user categories
+        categories_deleted = db.query(UserCategory).delete()
+        
+        db.commit()
+        
+        return {
+            "message": "Successfully deleted all feed data",
+            "feed_items_deleted": feed_items_deleted,
+            "categories_deleted": categories_deleted
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting all feed data: {str(e)}")
+
+@app.delete("/feed-items/delete/category/{category_name}")
+async def delete_feed_data_by_category(
+    category_name: str,
+    confirm: bool = Query(..., description="Must be true to confirm deletion"),
+    db: SessionLocal = Depends(get_db)
+):
+    """Delete all feed data for a specific category"""
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Must confirm deletion with confirm=true")
+    
+    try:
+        # Delete feed items for the category
+        feed_items_deleted = db.query(FeedItem).filter(
+            FeedItem.category == category_name
+        ).delete()
+        
+        # Delete user categories with this name
+        categories_deleted = db.query(UserCategory).filter(
+            UserCategory.category_name == category_name
+        ).delete()
+        
+        db.commit()
+        
+        return {
+            "message": f"Successfully deleted feed data for category '{category_name}'",
+            "feed_items_deleted": feed_items_deleted,
+            "categories_deleted": categories_deleted
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting feed data: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001) 
