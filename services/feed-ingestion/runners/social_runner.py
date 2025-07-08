@@ -186,6 +186,19 @@ class SocialRunner:
         created = 0
         updated = 0
         
+        # Delete older items from the same source to prevent storage bloat
+        if items:
+            try:
+                # Delete items older than 7 days from the same source
+                cutoff_date = datetime.utcnow() - timedelta(days=7)
+                deleted_count = self.db.query(FeedItem).filter(
+                    FeedItem.data_source_id == data_source.id,
+                    FeedItem.created_at < cutoff_date
+                ).delete()
+                print(f"Deleted {deleted_count} old items from {data_source.name}")
+            except Exception as e:
+                print(f"Error deleting old items: {e}")
+        
         for item in items:
             try:
                 # Check if item already exists (by URL)

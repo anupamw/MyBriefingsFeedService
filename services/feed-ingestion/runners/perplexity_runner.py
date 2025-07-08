@@ -226,6 +226,20 @@ class PerplexityRunner:
         category_id = category_info.get("category_id") if category_info else None
         user_id = category_info.get("user_id") if category_info else None
         
+        # Delete older items from the same source and category to prevent storage bloat
+        if content_items:
+            try:
+                # Delete items older than 7 days from the same source and category
+                cutoff_date = datetime.utcnow() - timedelta(days=7)
+                deleted_count = self.db.query(FeedItem).filter(
+                    FeedItem.data_source_id == data_source.id,
+                    FeedItem.category == category_name,
+                    FeedItem.created_at < cutoff_date
+                ).delete()
+                print(f"Deleted {deleted_count} old items from {data_source.name} for category {category_name}")
+            except Exception as e:
+                print(f"Error deleting old items: {e}")
+        
         for item in content_items:
             try:
                 # Check if item already exists (by title and source)
