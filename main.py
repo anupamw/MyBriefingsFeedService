@@ -292,7 +292,7 @@ async def root():
             
             body {
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                background: #f8f9fa;
                 min-height: 100vh;
                 display: flex;
                 align-items: center;
@@ -302,17 +302,18 @@ async def root():
             .container {
                 background: white;
                 border-radius: 20px;
-                box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+                box-shadow: 0 10px 30px rgba(0,0,0,0.08);
                 padding: 40px;
                 width: 100%;
                 max-width: 400px;
                 text-align: center;
+                border: 1px solid #e9ecef;
             }
             
             .logo {
                 font-size: 2.5em;
                 font-weight: bold;
-                color: #667eea;
+                color: #6c757d;
                 margin-bottom: 10px;
             }
             
@@ -352,29 +353,31 @@ async def root():
             
             input:focus {
                 outline: none;
-                border-color: #667eea;
+                border-color: #a8d5ba;
             }
             
             button {
                 width: 100%;
                 padding: 12px;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
+                background: #a8d5ba;
+                color: #2c3e50;
                 border: none;
                 border-radius: 10px;
                 font-size: 16px;
                 font-weight: 600;
                 cursor: pointer;
-                transition: transform 0.2s;
+                transition: all 0.2s;
             }
             
             button:hover {
-                transform: translateY(-2px);
+                background: #95c9a8;
+                transform: translateY(-1px);
+                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
             }
             
             .toggle-form {
                 margin-top: 20px;
-                color: #667eea;
+                color: #a8d5ba;
                 cursor: pointer;
                 text-decoration: underline;
             }
@@ -407,13 +410,20 @@ async def root():
             }
             
             .category-item {
-                background: #f8f9fa;
+                background: white;
+                border: 1px solid #e9ecef;
                 border-radius: 8px;
                 padding: 12px;
                 margin-bottom: 10px;
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
+                transition: all 0.2s;
+            }
+            
+            .category-item:hover {
+                border-color: #a8d5ba;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
             }
             
             .category-name {
@@ -422,13 +432,18 @@ async def root():
             }
             
             .delete-category {
-                background: #ff4757;
-                color: white;
+                background: #f8d7da;
+                color: #721c24;
                 border: none;
                 border-radius: 4px;
                 padding: 4px 8px;
                 font-size: 12px;
                 cursor: pointer;
+                transition: all 0.2s;
+            }
+            
+            .delete-category:hover {
+                background: #f5c6cb;
             }
             
             .add-category {
@@ -447,12 +462,17 @@ async def root():
             .add-category button {
                 width: 100%;
                 padding: 8px;
-                background: #667eea;
-                color: white;
+                background: #a8d5ba;
+                color: #2c3e50;
                 border: none;
                 border-radius: 6px;
                 font-size: 14px;
                 cursor: pointer;
+                transition: all 0.2s;
+            }
+            
+            .add-category button:hover {
+                background: #95c9a8;
             }
             
             .feed-content {
@@ -464,7 +484,8 @@ async def root():
                 border-radius: 20px;
                 padding: 30px;
                 margin-bottom: 20px;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+                box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+                border: 1px solid #e9ecef;
             }
             
             .feed-item {
@@ -472,12 +493,15 @@ async def root():
                 border-radius: 15px;
                 padding: 25px;
                 margin-bottom: 15px;
-                box-shadow: 0 5px 15px rgba(0,0,0,0.08);
-                transition: transform 0.2s;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+                border: 1px solid #e9ecef;
+                transition: all 0.2s;
             }
             
             .feed-item:hover {
-                transform: translateY(-2px);
+                transform: translateY(-1px);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+                border-color: #a8d5ba;
             }
             
             .feed-title {
@@ -501,18 +525,23 @@ async def root():
             }
             
             .logout-btn {
-                background: #ff4757;
+                background: #f8d7da;
+                color: #721c24;
                 margin-top: 20px;
             }
             
+            .logout-btn:hover {
+                background: #f5c6cb;
+            }
+            
             .error {
-                color: #ff4757;
+                color: #721c24;
                 margin-top: 10px;
                 font-size: 0.9em;
             }
             
             .success {
-                color: #2ed573;
+                color: #155724;
                 margin-top: 10px;
                 font-size: 0.9em;
             }
@@ -568,12 +597,15 @@ async def root():
             <div class="main-content">
                 <div class="sidebar">
                     <h3>Your Categories</h3>
+                    <div style="margin-bottom: 15px;">
+                        <span style="cursor: pointer; color: #a8d5ba; text-decoration: underline; font-weight: 500;" onclick="clearCategoryFilter()">Show All</span>
+                    </div>
                     <div id="categories-list"></div>
                     <div class="add-category">
                         <input type="text" id="new-category" placeholder="Enter category name (max 140 chars)" maxlength="140">
                         <button onclick="addCategory()">Add Category</button>
                     </div>
-                    <button id="refresh-briefings-btn" style="margin-top:20px;width:100%;background:#667eea;color:white;border:none;border-radius:6px;padding:10px;font-size:14px;cursor:pointer;" onclick="refreshBriefings()">Refresh my briefings</button>
+                    <button id="refresh-briefings-btn" style="margin-top:20px;width:100%;background:#a8d5ba;color:#2c3e50;border:none;border-radius:6px;padding:10px;font-size:14px;cursor:pointer;transition:all 0.2s;" onclick="refreshBriefings()">Refresh my briefings</button>
                 </div>
                 
                 <div class="feed-content">
@@ -732,7 +764,7 @@ async def root():
                     const categoryDiv = document.createElement('div');
                     categoryDiv.className = 'category-item';
                     categoryDiv.innerHTML = `
-                        <span class="category-name">${category.category_name}</span>
+                        <span class="category-name" style="cursor: pointer; color: #a8d5ba; text-decoration: underline;" onclick="filterByCategory('${category.category_name}')">${category.category_name}</span>
                         <button class="delete-category" onclick="deleteCategory(${category.id})">×</button>
                     `;
                     container.appendChild(categoryDiv);
@@ -810,8 +842,8 @@ async def root():
                     const filterHeader = document.createElement('div');
                     filterHeader.style.cssText = 'background:#f8f9fa;padding:15px;border-radius:10px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;';
                     filterHeader.innerHTML = `
-                        <span style="font-weight:600;color:#333;">Showing feeds from: <span style="color:#667eea;">${currentCategoryFilter}</span></span>
-                        <button onclick="clearCategoryFilter()" style="background:#ff4757;color:white;border:none;border-radius:5px;padding:8px 12px;cursor:pointer;">Clear Filter</button>
+                        <span style="font-weight:600;color:#333;">Showing feeds from: <span style="color:#a8d5ba;">${currentCategoryFilter}</span></span>
+                        <button onclick="clearCategoryFilter()" style="background:#f8d7da;color:#721c24;border:none;border-radius:5px;padding:8px 12px;cursor:pointer;transition:all 0.2s;">Clear Filter</button>
                     `;
                     container.appendChild(filterHeader);
                 }
@@ -827,7 +859,7 @@ async def root():
                         age = timeAgo(publishedDate);
                     }
                     itemDiv.innerHTML = `
-                        <div class="feed-category" style="font-weight:600;color:#667eea;margin-bottom:4px;cursor:pointer;text-decoration:underline;" onclick="filterByCategory('${item.category || 'Uncategorized'}')">${item.category || 'Uncategorized'}</div>
+                        <div class="feed-category" style="font-weight:600;color:#a8d5ba;margin-bottom:4px;cursor:pointer;text-decoration:underline;" onclick="filterByCategory('${item.category || 'Uncategorized'}')">${item.category || 'Uncategorized'}</div>
                         <div class="feed-summary">${item.summary || ''}</div>
                         <div class="feed-meta">
                             <span>Source: ${item.source || 'Unknown'}</span>
