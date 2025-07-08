@@ -76,6 +76,7 @@ class FeedItemDB(Base):
     source = Column(String(100))
     published_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
+    category = Column(String(100))  # Add category field
 
 class UserCategoryDB(Base):
     __tablename__ = "user_categories"
