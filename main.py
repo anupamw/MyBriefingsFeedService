@@ -639,7 +639,7 @@ async def root():
                         <h1 id="feed-header-title">Welcome to Your Feed! 📰</h1>
                         <p>Here are your personalized news briefings</p>
                     </div>
-                    <div id="digital-clock" style="background: #23272f; color: #a8d5ba; padding: 14px 28px; border-radius: 16px; font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace; font-size: 1.45em; font-weight: 600; letter-spacing: 0.04em; box-shadow: 0 2px 12px rgba(40,60,80,0.10); border: none; display: inline-block; margin-left: 10px;">
+                    <div id="digital-clock" style="background: #f8f9fa; color: #495057; padding: 7px 16px; border-radius: 8px; font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace; font-size: 1.05em; font-weight: 500; letter-spacing: 0.01em; box-shadow: 0 1px 4px rgba(40,60,80,0.06); border: 1px solid #dee2e6; display: inline-block; margin-left: 10px;">
                     </div>
                 </div>
                 <button class="logout-btn" onclick="logout()">Logout</button>
@@ -666,11 +666,34 @@ async def root():
         </div>
         
         <script>
-            // On page load, check for token and show feed if present
+            let feedRefreshInterval = null;
+
+            function startPeriodicFeedRefresh() {
+                if (feedRefreshInterval) clearInterval(feedRefreshInterval);
+                feedRefreshInterval = setInterval(() => {
+                    // Only refresh if user is still logged in
+                    const token = localStorage.getItem('token');
+                    if (token) {
+                        showFeed(currentOffset, currentCategoryFilter);
+                    } else {
+                        clearInterval(feedRefreshInterval);
+                    }
+                }, 60000); // 1 minute
+            }
+
+            function stopPeriodicFeedRefresh() {
+                if (feedRefreshInterval) {
+                    clearInterval(feedRefreshInterval);
+                    feedRefreshInterval = null;
+                }
+            }
+
+            // Call this after login, after adding/deleting a category, or on page load
             document.addEventListener('DOMContentLoaded', function() {
                 let currentToken = localStorage.getItem('token');
                 if (currentToken) {
                     showFeed();
+                    startPeriodicFeedRefresh();
                 }
             });
             
@@ -719,6 +742,7 @@ async def root():
                     if (response.ok) {
                         localStorage.setItem('token', data.access_token);
                         showFeed();
+                        startPeriodicFeedRefresh();
                     } else {
                         showError(data.detail);
                     }
@@ -1008,9 +1032,9 @@ async def root():
                                 ${needsMore ? `<span id="${moreId}" class="feed-card-more" onclick="toggleFeedCardText('${textId}', '${moreId}')">More</span>` : ''}
                             </div>
                             <!-- Card Footer -->
-                            <div style="display: flex; justify-content: flex-end; align-items: center; margin-top: auto; padding-top: 12px; border-top: 1px solid #f0f0f0;">
-                                ${item.url ? `<a href="${item.url}" target="_blank" style="color: #a8d5ba; text-decoration: none; font-size: 0.85em; font-weight: 500;">Read More →</a>` : ''}
-                            </div>
+                            ${item.url ? `<div style="display: flex; justify-content: flex-end; align-items: center; margin-top: 18px;">
+                                <a href="${item.url}" target="_blank" style="color: #a8d5ba; text-decoration: none; font-size: 0.85em; font-weight: 500;">Read More →</a>
+                            </div>` : ''}
                         </div>
                     `;
                     // Store published date as data attribute for updating age
@@ -1066,6 +1090,7 @@ async def root():
                 document.getElementById('feed-container').style.display = 'none';
                 document.getElementById('login-form').classList.add('active');
                 document.getElementById('signup-form').classList.remove('active');
+                stopPeriodicFeedRefresh();
             }
             
             function showError(message) {
