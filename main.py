@@ -867,7 +867,6 @@ async def root():
                     showError('Please enter a category name.');
                     return;
                 }
-                
                 try {
                     const response = await fetch('/user/categories', {
                         method: 'POST',
@@ -877,13 +876,15 @@ async def root():
                         },
                         body: JSON.stringify({ category_name: categoryName })
                     });
-                    
                     const data = await response.json();
-                    
                     if (response.ok) {
                         document.getElementById('new-category').value = '';
                         loadCategories();
-                        showSuccess('Category added successfully!');
+                        showSuccess('Category added successfully! Generating your feed...');
+                        // Trigger feed generation for this user
+                        await triggerFeedGeneration();
+                        // Refresh the feed after generation
+                        await showFeed(0, null);
                     } else {
                         showError(data.detail);
                     }
@@ -891,15 +892,36 @@ async def root():
                     showError('Failed to add category.');
                 }
             }
-            
+
+            async function triggerFeedGeneration() {
+                const token = localStorage.getItem('token');
+                if (!token) return;
+                try {
+                    // Call the ingestion endpoint for this user
+                    const resp = await fetch('/ingestion/ingest/perplexity', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        // Optionally poll for completion if needed
+                        if (data.task_id) {
+                            await pollTaskCompletion(data.task_id);
+                        }
+                    }
+                } catch (error) {
+                    // Optionally show error
+                }
+            }
+
             async function deleteCategory(categoryId) {
                 const token = localStorage.getItem('token');
                 if (!token) return;
-                
                 if (!confirm('Are you sure you want to delete this category?')) {
                     return;
                 }
-                
                 try {
                     const response = await fetch(`/user/categories/${categoryId}`, {
                         method: 'DELETE',
@@ -907,12 +929,12 @@ async def root():
                             'Authorization': `Bearer ${token}`
                         }
                     });
-                    
                     const data = await response.json();
-                    
                     if (response.ok) {
                         loadCategories();
                         showSuccess('Category deleted successfully!');
+                        // Refresh the feed to remove items from this category
+                        await showFeed(0, null);
                     } else {
                         showError(data.detail);
                     }
