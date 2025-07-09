@@ -962,7 +962,7 @@ async def root():
                 const token = localStorage.getItem('token');
                 if (!token) return;
                 try {
-                    const response = await fetch('/ingest/perplexity', {
+                    const response = await fetch('/ingestion/ingest/perplexity', {
                         method: 'POST',
                         headers: {
                             'Authorization': `Bearer ${token}`
