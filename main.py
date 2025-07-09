@@ -490,18 +490,32 @@ async def root():
             
             .feed-item {
                 background: white;
-                border-radius: 15px;
+                border-radius: 20px;
                 padding: 25px;
-                margin-bottom: 15px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+                margin-bottom: 20px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.08);
                 border: 1px solid #e9ecef;
-                transition: all 0.2s;
+                transition: all 0.3s ease;
+                min-height: 200px;
+                position: relative;
+                overflow: hidden;
             }
             
             .feed-item:hover {
-                transform: translateY(-1px);
-                box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+                transform: translateY(-3px);
+                box-shadow: 0 8px 25px rgba(0,0,0,0.12);
                 border-color: #a8d5ba;
+            }
+            
+            .feed-item::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 4px;
+                background: linear-gradient(90deg, #a8d5ba, #95c9a8);
+                border-radius: 20px 20px 0 0;
             }
             
             .feed-title {
@@ -875,6 +889,14 @@ async def root():
                     container.appendChild(filterHeader);
                 }
                 
+                if (items.length === 0) {
+                    const emptyDiv = document.createElement('div');
+                    emptyDiv.style.cssText = 'text-align:center;padding:40px;color:#666;font-style:italic;background:white;border-radius:15px;box-shadow:0 2px 8px rgba(0,0,0,0.05);';
+                    emptyDiv.innerHTML = 'No feed items found. Try refreshing your briefings!';
+                    container.appendChild(emptyDiv);
+                    return;
+                }
+                
                 items.forEach(item => {
                     const itemDiv = document.createElement('div');
                     itemDiv.className = 'feed-item';
@@ -885,12 +907,38 @@ async def root():
                         published = publishedDate.toLocaleString();
                         age = timeAgo(publishedDate);
                     }
+                    
+                    // Create card-based layout
                     itemDiv.innerHTML = `
-                        <div class="feed-category" style="font-weight:600;color:#a8d5ba;margin-bottom:4px;cursor:pointer;text-decoration:underline;" onclick="filterByCategory('${item.category || 'Uncategorized'}')">${item.category || 'Uncategorized'}</div>
-                        <div class="feed-summary">${item.summary || ''}</div>
-                        <div class="feed-meta">
-                            <span>Source: ${item.source || 'Unknown'}</span>
-                            <span>${published}${age ? ' (' + age + ')' : ''}</span>
+                        <div style="display: flex; flex-direction: column; height: 100%;">
+                            <!-- Card Header -->
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="background: #a8d5ba; color: #2c3e50; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; cursor: pointer;" onclick="filterByCategory('${item.category || 'Uncategorized'}')">${item.category || 'Uncategorized'}</span>
+                                    <span style="color: #666; font-size: 0.85em;">•</span>
+                                    <span style="color: #666; font-size: 0.85em;">${item.source || 'Unknown'}</span>
+                                </div>
+                                <div style="text-align: right; font-size: 0.8em; color: #999;">
+                                    <div>${age || 'Unknown time'}</div>
+                                    <div style="font-size: 0.9em; margin-top: 2px;">${published ? published.split(',')[0] : ''}</div>
+                                </div>
+                            </div>
+                            
+                            <!-- Card Content -->
+                            <div style="flex: 1; display: flex; flex-direction: column;">
+                                <div style="font-size: 1.1em; font-weight: 600; color: #333; margin-bottom: 8px; line-height: 1.4;">
+                                    ${item.summary ? item.summary.substring(0, 200) + (item.summary.length > 200 ? '...' : '') : 'No summary available'}
+                                </div>
+                                ${item.content ? `<div style="color: #666; line-height: 1.5; margin-bottom: 12px; font-size: 0.95em;">${item.content.substring(0, 300) + (item.content.length > 300 ? '...' : '')}</div>` : ''}
+                            </div>
+                            
+                            <!-- Card Footer -->
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 12px; border-top: 1px solid #f0f0f0;">
+                                <div style="display: flex; gap: 8px;">
+                                    <span style="color: #999; font-size: 0.8em;">ID: ${item.id}</span>
+                                </div>
+                                ${item.url ? `<a href="${item.url}" target="_blank" style="color: #a8d5ba; text-decoration: none; font-size: 0.85em; font-weight: 500;">Read More →</a>` : ''}
+                            </div>
                         </div>
                     `;
                     container.appendChild(itemDiv);
