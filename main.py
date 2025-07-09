@@ -661,11 +661,13 @@ async def root():
         </div>
         
         <script>
-            let currentToken = localStorage.getItem('token');
-            
-            if (currentToken) {
-                showFeed();
-            }
+            // On page load, check for token and show feed if present
+            document.addEventListener('DOMContentLoaded', function() {
+                let currentToken = localStorage.getItem('token');
+                if (currentToken) {
+                    showFeed();
+                }
+            });
             
             // Digital clock function
             function updateClock() {
@@ -994,6 +996,8 @@ async def root():
                     }
                 });
             }
+            // Update feed ages every minute
+            setInterval(updateAllFeedAges, 60000);
 
             function filterByCategory(category) {
                 showFeed(0, category);
