@@ -638,5 +638,109 @@ async def delete_feed_data_by_category(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error deleting feed data: {str(e)}")
 
+@app.get("/category-ingestion-history")
+async def get_category_ingestion_history(
+    category: Optional[str] = None,
+    user_id: Optional[int] = None,
+    limit: int = 50,
+    db: SessionLocal = Depends(get_db)
+):
+    """Get category-specific ingestion history by analyzing feed items"""
+    
+    # Get all categories that have feed items
+    categories_with_items = db.query(FeedItem.category).distinct().all()
+    categories_with_items = [cat[0] for cat in categories_with_items if cat[0]]
+    
+    # Filter by specific category if provided
+    if category:
+        categories_with_items = [category] if category in categories_with_items else []
+    
+    # Filter by user categories if user_id provided
+    if user_id:
+        user_categories = db.query(UserCategory).filter(
+            UserCategory.user_id == user_id,
+            UserCategory.is_active == True
+        ).all()
+        user_category_names = [cat.category_name for cat in user_categories]
+        categories_with_items = [cat for cat in categories_with_items if cat in user_category_names]
+    
+    history = []
+    
+    for cat_name in categories_with_items:
+        # Get the most recent items for this category
+        recent_items = db.query(FeedItem).filter(
+            FeedItem.category == cat_name
+        ).order_by(FeedItem.created_at.desc()).limit(limit).all()
+        
+        if recent_items:
+            # Group items by creation time (within 5 minutes = same ingestion job)
+            from collections import defaultdict
+            time_groups = defaultdict(list)
+            
+            for item in recent_items:
+                # Round to nearest 5 minutes to group items from same job
+                rounded_time = item.created_at.replace(second=0, microsecond=0)
+                rounded_time = rounded_time.replace(minute=(rounded_time.minute // 5) * 5)
+                time_groups[rounded_time].append(item)
+            
+            # Create history entries for each time group
+            for job_time, items in time_groups.items():
+                history.append({
+                    "category": cat_name,
+                    "job_timestamp": job_time.isoformat(),
+                    "items_created": len(items),
+                    "latest_item_id": max(item.id for item in items),
+                    "earliest_item_id": min(item.id for item in items),
+                    "sample_summaries": [item.summary[:100] + "..." if item.summary and len(item.summary) > 100 else item.summary for item in items[:3]]
+                })
+    
+    # Sort by job timestamp (most recent first)
+    history.sort(key=lambda x: x["job_timestamp"], reverse=True)
+    
+    return {
+        "total_categories_with_items": len(set(item["category"] for item in history)),
+        "total_ingestion_jobs": len(history),
+        "history": history[:limit]
+    }
+
+@app.get("/category-status/{user_id}")
+async def get_category_status(user_id: int, db: SessionLocal = Depends(get_db)):
+    """Get status of all categories for a user (with/without feed items)"""
+    
+    # Get user's categories
+    user_categories = db.query(UserCategory).filter(
+        UserCategory.user_id == user_id,
+        UserCategory.is_active == True
+    ).all()
+    
+    category_status = []
+    
+    for category in user_categories:
+        # Check if this category has feed items
+        feed_items = db.query(FeedItem).filter(
+            FeedItem.category == category.category_name
+        ).order_by(FeedItem.created_at.desc()).limit(1).all()
+        
+        latest_item = feed_items[0] if feed_items else None
+        
+        category_status.append({
+            "category_id": category.id,
+            "category_name": category.category_name,
+            "has_feed_items": len(feed_items) > 0,
+            "latest_item_created": latest_item.created_at.isoformat() if latest_item else None,
+            "latest_item_id": latest_item.id if latest_item else None,
+            "category_created": category.created_at.isoformat(),
+            "days_since_category_created": (datetime.utcnow() - category.created_at).days,
+            "days_since_last_item": (datetime.utcnow() - latest_item.created_at).days if latest_item else None
+        })
+    
+    return {
+        "user_id": user_id,
+        "total_categories": len(category_status),
+        "categories_with_items": len([c for c in category_status if c["has_feed_items"]]),
+        "categories_without_items": len([c for c in category_status if not c["has_feed_items"]]),
+        "category_status": category_status
+    }
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001) 
