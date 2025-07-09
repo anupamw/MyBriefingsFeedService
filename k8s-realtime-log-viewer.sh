@@ -246,8 +246,8 @@ class K8sRealTimeLogHandler(http.server.SimpleHTTPRequestHandler):
         try:
             # Define your application namespaces and pod patterns
             # Add your specific namespaces and pod name patterns here
-            app_namespaces = ['default', 'feed-ingestion']  # Add your namespaces
-            app_pod_patterns = ['fastapi', 'feed', 'ingestion', 'celery', 'worker']  # Add your pod name patterns
+            app_namespaces = ['default', 'my-briefings']  # Add your namespaces
+            app_pod_patterns = ['my-briefings', 'app', 'celery', 'worker', 'ingestion']  # Add your pod name patterns
             
             # Get pods from your application namespaces only
             all_pods = []
