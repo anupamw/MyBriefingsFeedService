@@ -559,6 +559,32 @@ async def root():
                 margin-top: 10px;
                 font-size: 0.9em;
             }
+            .feed-card-text {
+                color: #333;
+                font-size: 1.05em;
+                line-height: 1.5;
+                margin-bottom: 8px;
+                display: -webkit-box;
+                -webkit-line-clamp: 5;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                transition: max-height 0.3s;
+                max-height: 7.5em;
+            }
+            .feed-card-text.expanded {
+                -webkit-line-clamp: unset;
+                max-height: 1000em;
+                overflow: visible;
+            }
+            .feed-card-more {
+                color: #a8d5ba;
+                cursor: pointer;
+                font-size: 0.95em;
+                font-weight: 500;
+                margin-bottom: 8px;
+                display: inline-block;
+            }
         </style>
     </head>
     <body>
@@ -897,18 +923,28 @@ async def root():
                     return;
                 }
                 
-                items.forEach(item => {
+                items.forEach((item, idx) => {
                     const itemDiv = document.createElement('div');
                     itemDiv.className = 'feed-item';
                     let published = '';
                     let age = '';
+                    let publishedDate = null;
                     if (item.published_at) {
-                        const publishedDate = new Date(item.published_at);
-                        published = publishedDate.toLocaleString();
+                        publishedDate = new Date(item.published_at);
+                        published = formatFullDate(publishedDate);
                         age = timeAgo(publishedDate);
                     }
-                    
-                    // Create card-based layout
+                    // Combine summary and content for display
+                    let feedText = '';
+                    if (item.summary) feedText += item.summary;
+                    if (item.content) feedText += (feedText ? '\n\n' : '') + item.content;
+                    // Card layout with expandable text
+                    const textId = `feed-card-text-${idx}`;
+                    const moreId = `feed-card-more-${idx}`;
+                    const ageId = `feed-card-age-${idx}`;
+                    let needsMore = false;
+                    // Estimate if text is longer than 5 lines (roughly > 500 chars or > 400px height)
+                    if (feedText.length > 500) needsMore = true;
                     itemDiv.innerHTML = `
                         <div style="display: flex; flex-direction: column; height: 100%;">
                             <!-- Card Header -->
@@ -919,29 +955,43 @@ async def root():
                                     <span style="color: #666; font-size: 0.85em;">${item.source || 'Unknown'}</span>
                                 </div>
                                 <div style="text-align: right; font-size: 0.8em; color: #999;">
-                                    <div>${age || 'Unknown time'}</div>
-                                    <div style="font-size: 0.9em; margin-top: 2px;">${published ? published.split(',')[0] : ''}</div>
+                                    <div id="${ageId}">${age || 'Unknown time'}</div>
+                                    <div style="font-size: 0.95em; margin-top: 2px;">${published}</div>
                                 </div>
                             </div>
-                            
                             <!-- Card Content -->
                             <div style="flex: 1; display: flex; flex-direction: column;">
-                                <div style="font-size: 1.1em; font-weight: 600; color: #333; margin-bottom: 8px; line-height: 1.4;">
-                                    ${item.summary ? item.summary.substring(0, 200) + (item.summary.length > 200 ? '...' : '') : 'No summary available'}
-                                </div>
-                                ${item.content ? `<div style="color: #666; line-height: 1.5; margin-bottom: 12px; font-size: 0.95em;">${item.content.substring(0, 300) + (item.content.length > 300 ? '...' : '')}</div>` : ''}
+                                <div id="${textId}" class="feed-card-text">${feedText.replace(/\n/g, '<br>')}</div>
+                                ${needsMore ? `<span id="${moreId}" class="feed-card-more" onclick="toggleFeedCardText('${textId}', '${moreId}')">More</span>` : ''}
                             </div>
-                            
                             <!-- Card Footer -->
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 12px; border-top: 1px solid #f0f0f0;">
-                                <div style="display: flex; gap: 8px;">
-                                    <span style="color: #999; font-size: 0.8em;">ID: ${item.id}</span>
-                                </div>
+                            <div style="display: flex; justify-content: flex-end; align-items: center; margin-top: auto; padding-top: 12px; border-top: 1px solid #f0f0f0;">
                                 ${item.url ? `<a href="${item.url}" target="_blank" style="color: #a8d5ba; text-decoration: none; font-size: 0.85em; font-weight: 500;">Read More →</a>` : ''}
                             </div>
                         </div>
                     `;
+                    // Store published date as data attribute for updating age
+                    if (publishedDate) {
+                        itemDiv.setAttribute('data-published-at', publishedDate.toISOString());
+                        itemDiv.setAttribute('data-age-id', ageId);
+                    }
                     container.appendChild(itemDiv);
+                });
+                updateAllFeedAges();
+            }
+
+            function updateAllFeedAges() {
+                // For each feed-item, update the age label
+                document.querySelectorAll('.feed-item').forEach(itemDiv => {
+                    const publishedAt = itemDiv.getAttribute('data-published-at');
+                    const ageId = itemDiv.getAttribute('data-age-id');
+                    if (publishedAt && ageId) {
+                        const ageDiv = document.getElementById(ageId);
+                        if (ageDiv) {
+                            const publishedDate = new Date(publishedAt);
+                            ageDiv.textContent = timeAgo(publishedDate);
+                        }
+                    }
                 });
             }
 
@@ -1108,6 +1158,32 @@ async def root():
                 }
                 
                 throw new Error('Task timed out after 5 minutes');
+            }
+
+            function formatFullDate(date) {
+                // Format: Mon, Dec 25, 2023 14:30:45 (24-hour)
+                return date.toLocaleString('en-US', {
+                    weekday: 'short',
+                    year: 'numeric',
+                    month: 'short',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+            }
+
+            function toggleFeedCardText(textId, moreId) {
+                const textDiv = document.getElementById(textId);
+                const moreSpan = document.getElementById(moreId);
+                if (textDiv.classList.contains('expanded')) {
+                    textDiv.classList.remove('expanded');
+                    moreSpan.textContent = 'More';
+                } else {
+                    textDiv.classList.add('expanded');
+                    moreSpan.textContent = 'Less';
+                }
             }
         </script>
     </body>
