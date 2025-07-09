@@ -589,8 +589,13 @@ async def root():
         
         <div class="feed-container" id="feed-container">
             <div class="feed-header">
-                <h1>Welcome to Your Feed! 📰</h1>
-                <p>Here are your personalized news briefings</p>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div>
+                        <h1>Welcome to Your Feed! 📰</h1>
+                        <p>Here are your personalized news briefings</p>
+                    </div>
+                    <div id="digital-clock" style="background: #f8f9fa; padding: 10px 15px; border-radius: 8px; font-family: monospace; font-size: 1.1em; color: #495057; border: 1px solid #dee2e6;"></div>
+                </div>
                 <button class="logout-btn" onclick="logout()">Logout</button>
             </div>
             
@@ -621,6 +626,27 @@ async def root():
             if (currentToken) {
                 showFeed();
             }
+            
+            // Digital clock function
+            function updateClock() {
+                const now = new Date();
+                const timeString = now.toLocaleTimeString('en-US', { 
+                    hour12: false,
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+                const dateString = now.toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric'
+                });
+                document.getElementById('digital-clock').textContent = `${dateString} ${timeString}`;
+            }
+            
+            // Update clock every second
+            setInterval(updateClock, 1000);
+            updateClock(); // Initial call
             
             function toggleForm(type) {
                 document.getElementById('login-form').classList.remove('active');
@@ -821,11 +847,12 @@ async def root():
                         }
                     });
                     
+                    const data = await response.json();
+                    
                     if (response.ok) {
                         loadCategories();
                         showSuccess('Category deleted successfully!');
                     } else {
-                        const data = await response.json();
                         showError(data.detail);
                     }
                 } catch (error) {
@@ -881,8 +908,8 @@ async def root():
             function timeAgo(date) {
                 const now = new Date();
                 const seconds = Math.floor((now - date) / 1000);
-                if (seconds < 60) return `${seconds} seconds ago`;
                 const minutes = Math.floor(seconds / 60);
+                if (minutes < 1) return `1 minute ago`; // Minimum resolution is 1 minute
                 if (minutes < 120) return `${minutes} minutes ago`; // Show minutes for anything less than 2 hours
                 const hours = Math.floor(minutes / 60);
                 if (hours < 24) return `${hours} hours ago`;
@@ -961,22 +988,78 @@ async def root():
             async function refreshBriefings() {
                 const token = localStorage.getItem('token');
                 if (!token) return;
+                
+                // Show loading state
+                const refreshBtn = document.getElementById('refresh-briefings-btn');
+                const originalText = refreshBtn.textContent;
+                refreshBtn.textContent = '🔄 Refreshing...';
+                refreshBtn.disabled = true;
+                
                 try {
+                    // Trigger the ingestion
                     const response = await fetch('/ingestion/ingest/perplexity', {
                         method: 'POST',
                         headers: {
                             'Authorization': `Bearer ${token}`
                         }
                     });
+                    
                     if (response.ok) {
-                        showSuccess('Briefings refresh triggered!');
+                        const data = await response.json();
+                        showSuccess('Briefings refresh started! Waiting for completion...');
+                        
+                        // Poll for task completion
+                        await pollTaskCompletion(data.task_id);
+                        
+                        // Reload the feed
+                        await loadFeed();
+                        showSuccess('Briefings refreshed successfully!');
                     } else {
                         const data = await response.json();
                         showError(data.detail || 'Failed to trigger refresh.');
                     }
                 } catch (error) {
                     showError('Failed to trigger refresh.');
+                } finally {
+                    // Restore button state
+                    refreshBtn.textContent = originalText;
+                    refreshBtn.disabled = false;
                 }
+            }
+            
+            async function pollTaskCompletion(taskId) {
+                const maxAttempts = 60; // 5 minutes (60 * 5 seconds)
+                let attempts = 0;
+                
+                while (attempts < maxAttempts) {
+                    try {
+                        const response = await fetch(`/ingestion/task/${taskId}`, {
+                            headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('token')}`
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            const taskData = await response.json();
+                            
+                            if (taskData.status === 'SUCCESS') {
+                                console.log('Task completed successfully');
+                                return;
+                            } else if (taskData.status === 'FAILURE') {
+                                throw new Error('Task failed: ' + (taskData.result || 'Unknown error'));
+                            }
+                            // If still running, continue polling
+                        }
+                    } catch (error) {
+                        console.error('Error polling task status:', error);
+                    }
+                    
+                    // Wait 5 seconds before next poll
+                    await new Promise(resolve => setTimeout(resolve, 5000));
+                    attempts++;
+                }
+                
+                throw new Error('Task timed out after 5 minutes');
             }
         </script>
     </body>
@@ -1177,23 +1260,28 @@ async def create_user_category(
 
 @app.delete("/user/categories/{category_id}")
 async def delete_user_category(category_id: int, current_user: dict = Depends(get_current_user)):
-    """Delete a category for the current user"""
+    """Delete a category for the current user and all associated feed items"""
     db = SessionLocal()
-    
-    category = db.query(UserCategoryDB).filter(
-        UserCategoryDB.id == category_id,
-        UserCategoryDB.user_id == current_user["id"]
-    ).first()
-    
-    if not category:
+    try:
+        category = db.query(UserCategoryDB).filter(
+            UserCategoryDB.id == category_id,
+            UserCategoryDB.user_id == current_user["id"]
+        ).first()
+        if not category:
+            db.close()
+            raise HTTPException(status_code=404, detail="Category not found")
+        # Delete all feed items for this user and category
+        deleted_count = db.query(FeedItemDB).filter(
+            FeedItemDB.category == category.category_name
+        ).delete()
+        db.delete(category)
+        db.commit()
+        return {"message": "Category and associated feed items deleted successfully", "feed_items_deleted": deleted_count}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting category and feed items: {str(e)}")
+    finally:
         db.close()
-        raise HTTPException(status_code=404, detail="Category not found")
-    
-    db.delete(category)
-    db.commit()
-    db.close()
-    
-    return {"message": "Category deleted successfully"}
 
 # Legacy endpoints (keeping for backward compatibility)
 @app.get("/items", response_model=List[Item])

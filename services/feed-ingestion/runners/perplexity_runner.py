@@ -226,59 +226,43 @@ class PerplexityRunner:
         category_id = category_info.get("category_id") if category_info else None
         user_id = category_info.get("user_id") if category_info else None
         
-        # Delete older items from the same source and category to prevent storage bloat
+        # Delete ALL existing items for this category before inserting new ones
         if content_items:
             try:
-                # Delete items older than 7 days from the same source and category
-                cutoff_date = datetime.utcnow() - timedelta(days=7)
+                # Delete all items for this category (not just old ones)
                 deleted_count = self.db.query(FeedItem).filter(
-                    FeedItem.data_source_id == data_source.id,
-                    FeedItem.category == category_name,
-                    FeedItem.created_at < cutoff_date
+                    FeedItem.category == category_name
                 ).delete()
-                print(f"Deleted {deleted_count} old items from {data_source.name} for category {category_name}")
+                print(f"Deleted {deleted_count} existing items for category '{category_name}' before inserting new ones")
             except Exception as e:
-                print(f"Error deleting old items: {e}")
+                print(f"Error deleting existing items for category {category_name}: {e}")
         
         for item in content_items:
             try:
-                # Check if item already exists (by title and source)
-                existing_item = self.db.query(FeedItem).filter(
-                    FeedItem.title == item.get("title"),
-                    FeedItem.data_source_id == data_source.id
-                ).first()
+                # Create new item with category association
+                feed_item = FeedItem(
+                    title=item.get("title", "Untitled"),
+                    summary=item.get("summary", ""),
+                    url=item.get("url", ""),
+                    source="Perplexity AI",
+                    data_source_id=data_source.id,
+                    published_at=datetime.utcnow(),
+                    raw_data=item,
+                    category=category_name,
+                    tags=["ai", "perplexity", category_name.lower()] if category_name != "General" else ["ai", "perplexity"]
+                )
                 
-                if existing_item:
-                    # Update existing item
-                    existing_item.summary = item.get("summary", existing_item.summary)
-                    existing_item.url = item.get("url", existing_item.url)
-                    existing_item.updated_at = datetime.utcnow()
-                    updated += 1
-                else:
-                    # Create new item with category association
-                    feed_item = FeedItem(
-                        title=item.get("title", "Untitled"),
-                        summary=item.get("summary", ""),
-                        url=item.get("url", ""),
-                        source="Perplexity AI",
-                        data_source_id=data_source.id,
-                        published_at=datetime.utcnow(),
-                        raw_data=item,
-                        category=category_name,
-                        tags=["ai", "perplexity", category_name.lower()] if category_name != "General" else ["ai", "perplexity"]
-                    )
-                    
-                    # Add user-specific metadata if available
-                    if user_id:
-                        feed_item.raw_data = {
-                            **item,
-                            "user_category_id": category_id,
-                            "user_id": user_id,
-                            "category_name": category_name
-                        }
-                    
-                    self.db.add(feed_item)
-                    created += 1
+                # Add user-specific metadata if available
+                if user_id:
+                    feed_item.raw_data = {
+                        **item,
+                        "user_category_id": category_id,
+                        "user_id": user_id,
+                        "category_name": category_name
+                    }
+                
+                self.db.add(feed_item)
+                created += 1
                 
             except Exception as e:
                 print(f"Error saving feed item: {e}")
