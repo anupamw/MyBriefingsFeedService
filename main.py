@@ -921,11 +921,18 @@ async def root():
                 const token = localStorage.getItem('token');
                 if (!token) return;
                 try {
-                    // Call the ingestion endpoint for this user
-                    const resp = await fetch('/ingestion/ingest/perplexity', {
+                    // Get current user info to get user_id
+                    const userResp = await fetch('/auth/me', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (!userResp.ok) return;
+                    const userData = await userResp.json();
+                    
+                    // Call the ingestion endpoint with correct format
+                    const resp = await fetch(`http://64.227.134.87:30101/ingest/perplexity?user_id=${userData.id}`, {
                         method: 'POST',
                         headers: {
-                            'Authorization': `Bearer ${token}`
+                            'Content-Type': 'application/json'
                         }
                     });
                     if (resp.ok) {
@@ -937,6 +944,7 @@ async def root():
                     }
                 } catch (error) {
                     // Optionally show error
+                    console.error('Failed to trigger feed generation:', error);
                 }
             }
 
