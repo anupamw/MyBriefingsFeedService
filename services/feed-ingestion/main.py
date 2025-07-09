@@ -512,6 +512,30 @@ async def debug_test_perplexity_api():
     except Exception as e:
         return {"error": f"Failed to test Perplexity API: {str(e)}"}
 
+@app.get("/debug/user-feed/{user_id}")
+async def debug_user_feed(user_id: int, db: SessionLocal = Depends(get_db)):
+    """Debug endpoint: show user categories and feed items for a user"""
+    # Get user categories
+    user_categories = db.query(UserCategory).filter(UserCategory.user_id == user_id).all()
+    category_names = [cat.category_name for cat in user_categories]
+    # Get feed items for those categories
+    feed_items = []
+    if category_names:
+        feed_items = db.query(FeedItem).filter(FeedItem.category.in_(category_names)).all()
+    return {
+        "user_id": user_id,
+        "categories": category_names,
+        "feed_items": [
+            {
+                "id": item.id,
+                "title": item.title,
+                "category": item.category,
+                "published_at": item.published_at.isoformat() if item.published_at else None
+            }
+            for item in feed_items
+        ]
+    }
+
 # Feed data deletion APIs
 @app.delete("/feed-items/delete/user/{user_id}")
 async def delete_feed_data_for_user(
