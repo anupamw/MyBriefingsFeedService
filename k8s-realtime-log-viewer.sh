@@ -244,31 +244,41 @@ class K8sRealTimeLogHandler(http.server.SimpleHTTPRequestHandler):
     def stream_logs(self):
         """Stream logs in real-time using Server-Sent Events"""
         try:
-            # Define your application namespaces and pod patterns
-            # Add your specific namespaces and pod name patterns here
-            app_namespaces = ['default', 'my-briefings']  # Add your namespaces
-            app_pod_patterns = ['my-briefings', 'app', 'celery', 'worker', 'ingestion']  # Add your pod name patterns
-            
-            # Get pods from your application namespaces only
-            all_pods = []
-            for namespace in app_namespaces:
-                try:
-                    result = subprocess.run(['kubectl', 'get', 'pods', '-n', namespace, '--no-headers', '-o', 'custom-columns=NAME:.metadata.name'], 
-                                         capture_output=True, text=True)
-                    if result.stdout.strip():
-                        for pod_name in result.stdout.strip().split('\n'):
-                            if pod_name.strip():
-                                # Check if pod name matches any of your patterns
-                                pod_lower = pod_name.lower()
-                                if any(pattern.lower() in pod_lower for pattern in app_pod_patterns):
-                                    all_pods.append((namespace, pod_name.strip()))
-                except Exception as e:
-                    print(f"Error getting pods from namespace {namespace}: {e}")
-            
-            # Start monitoring each application pod
-            for namespace, pod_name in all_pods:
-                threading.Thread(target=self.monitor_pod, args=(namespace, pod_name), daemon=True).start()
-            
+            import threading
+            import time
+            self.active_pods = set()
+            self.pod_threads = {}
+            self.lock = threading.Lock()
+
+            def discover_pods():
+                app_namespaces = ['default', 'my-briefings']
+                app_pod_patterns = ['my-briefings', 'app', 'celery', 'worker', 'ingestion']
+                while True:
+                    new_pods = set()
+                    for namespace in app_namespaces:
+                        try:
+                            result = subprocess.run([
+                                'kubectl', 'get', 'pods', '-n', namespace, '--no-headers', '-o', 'custom-columns=NAME:.metadata.name'
+                            ], capture_output=True, text=True)
+                            if result.stdout.strip():
+                                for pod_name in result.stdout.strip().split('\n'):
+                                    if pod_name.strip():
+                                        pod_lower = pod_name.lower()
+                                        if any(pattern.lower() in pod_lower for pattern in app_pod_patterns):
+                                            new_pods.add((namespace, pod_name.strip()))
+                        except Exception as e:
+                            print(f"Error getting pods from namespace {namespace}: {e}")
+                    with self.lock:
+                        for pod in new_pods:
+                            if pod not in self.active_pods:
+                                t = threading.Thread(target=self.monitor_pod, args=(pod[0], pod[1]), daemon=True)
+                                t.start()
+                                self.pod_threads[pod] = t
+                                self.active_pods.add(pod)
+                    time.sleep(10)  # Check every 10 seconds
+
+            threading.Thread(target=discover_pods, daemon=True).start()
+
             # Keep connection alive and send heartbeat
             while True:
                 self.wfile.write(b'data: {"timestamp":"' + datetime.now().isoformat().encode() + b'","pod":"SYSTEM","namespace":"system","message":"Heartbeat","level":"info"}\n\n')
