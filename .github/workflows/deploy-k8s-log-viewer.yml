@@ -1,0 +1,203 @@
+name: Deploy K8s Real-Time Log Viewer
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'k8s-realtime-log-viewer.sh'
+      - '.github/workflows/deploy-k8s-log-viewer.yml'
+
+env:
+  DROPLET_IP: ${{ secrets.DIGITALOCEAN_HOST }}
+  DROPLET_USER: root
+  SSH_PRIVATE_KEY: ${{ secrets.DIGITALOCEAN_SSH_KEY }}
+
+jobs:
+  deploy-k8s-log-viewer:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Debug environment variables
+      run: |
+        echo "🔍 Debugging environment variables..."
+        echo "DROPLET_IP length: ${#DROPLET_IP}"
+        echo "DROPLET_IP (first 10 chars): ${DROPLET_IP:0:10}..."
+        echo "SSH_PRIVATE_KEY length: ${#SSH_PRIVATE_KEY}"
+        echo "SSH_PRIVATE_KEY (first 50 chars): ${SSH_PRIVATE_KEY:0:50}..."
+        echo "DROPLET_USER: $DROPLET_USER"
+        
+        if [ -z "$DROPLET_IP" ]; then
+          echo "❌ DROPLET_IP is empty!"
+          exit 1
+        fi
+        
+        if [ -z "$SSH_PRIVATE_KEY" ]; then
+          echo "❌ SSH_PRIVATE_KEY is empty!"
+          exit 1
+        fi
+        
+        echo "✅ Environment variables are set"
+    
+    - name: Setup SSH
+      run: |
+        echo "🔧 Setting up SSH..."
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        echo "SSH key file created, size: $(wc -c < ~/.ssh/id_rsa) bytes"
+        
+        # Check if the key starts with the expected format
+        if grep -q "BEGIN.*PRIVATE KEY" ~/.ssh/id_rsa; then
+          echo "✅ SSH key has correct BEGIN marker"
+        else
+          echo "❌ SSH key missing BEGIN marker"
+          echo "First few lines:"
+          head -5 ~/.ssh/id_rsa
+        fi
+        
+        if grep -q "END.*PRIVATE KEY" ~/.ssh/id_rsa; then
+          echo "✅ SSH key has correct END marker"
+        else
+          echo "❌ SSH key missing END marker"
+          echo "Last few lines:"
+          tail -5 ~/.ssh/id_rsa
+        fi
+        
+        ssh-keyscan -H $DROPLET_IP >> ~/.ssh/known_hosts
+        echo "SSH setup complete"
+        
+        echo "🔍 Testing SSH connection..."
+        ssh -i ~/.ssh/id_rsa -o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP "echo 'SSH test successful'" || echo "SSH test failed"
+    
+    - name: Copy k8s log viewer files to droplet
+      run: |
+        echo "📤 Copying k8s real-time log viewer files to droplet..."
+        echo "Using: scp k8s-realtime-log-viewer.sh $DROPLET_USER@$DROPLET_IP:~/"
+        echo "DROPLET_USER: $DROPLET_USER"
+        echo "DROPLET_IP: $DROPLET_IP"
+        
+        echo "🔍 Checking files before copy..."
+        ls -la k8s-realtime-log-viewer.sh
+        
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no k8s-realtime-log-viewer.sh $DROPLET_USER@$DROPLET_IP:~/
+        echo "✅ K8s log viewer script copied successfully"
+        
+        echo "🔍 Verifying file on droplet..."
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP "ls -la k8s-realtime-log-viewer.sh"
+    
+    - name: Deploy k8s real-time log viewer
+      run: |
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP << 'EOF'
+          set -e
+          
+          echo "🚀 Deploying K8s Real-Time Log Viewer..."
+          
+          # Make script executable
+          chmod +x k8s-realtime-log-viewer.sh
+          
+          # Stop existing services if running
+          echo "🛑 Stopping existing log viewer services..."
+          systemctl stop realtime-log-viewer || true
+          systemctl stop k8s-realtime-log-viewer || true
+          
+          # Run deployment script
+          echo "📦 Running k8s deployment script..."
+          ./k8s-realtime-log-viewer.sh
+          
+          # Check if service is running
+          echo "🔍 Checking service status..."
+          if systemctl is-active --quiet k8s-realtime-log-viewer; then
+            echo "✅ K8s Real-Time Log Viewer is running"
+          else
+            echo "❌ K8s Real-Time Log Viewer failed to start"
+            systemctl status k8s-realtime-log-viewer
+            exit 1
+          fi
+          
+          # Test web interface
+          echo "🌐 Testing web interface..."
+          sleep 10  # Wait for service to fully start
+          
+          if curl -f http://localhost:8080 > /dev/null 2>&1; then
+            echo "✅ Web interface is accessible"
+          else
+            echo "❌ Web interface is not accessible"
+            echo "Checking service logs..."
+            journalctl -u k8s-realtime-log-viewer --no-pager -n 20
+            exit 1
+          fi
+          
+          # Test k8s connectivity
+          echo "🔍 Testing k8s connectivity..."
+          kubectl get pods --all-namespaces --no-headers | head -5
+          
+          echo ""
+          echo "🎉 K8s Real-Time Log Viewer deployment completed!"
+          echo ""
+          echo "📊 Access your logs at:"
+          echo "   - Web Interface: http://$DROPLET_IP:8080"
+          echo ""
+          echo "🔴 Features:"
+          echo "   - REAL-TIME streaming (logs appear as they happen)"
+          echo "   - Live statistics (total logs, errors, warnings, pods, namespaces)"
+          echo "   - Color-coded log levels"
+          echo "   - All Kubernetes pods"
+          echo "   - Namespace information"
+          echo "   - Auto-scroll to bottom"
+          echo ""
+          echo "📝 Management:"
+          echo "   - Start: systemctl start k8s-realtime-log-viewer"
+          echo "   - Stop: systemctl stop k8s-realtime-log-viewer"
+          echo "   - Status: systemctl status k8s-realtime-log-viewer"
+          echo "   - Logs: journalctl -u k8s-realtime-log-viewer -f"
+        EOF
+    
+    - name: Verify deployment
+      run: |
+        echo "🔍 Verifying deployment..."
+        
+        # Test SSH connection and service status
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP << 'EOF'
+          echo "📊 Service Status:"
+          systemctl status k8s-realtime-log-viewer --no-pager
+          
+          echo ""
+          echo "📊 K8s Pods Status:"
+          kubectl get pods --all-namespaces
+          
+          echo ""
+          echo "📊 Port Status:"
+          netstat -tlnp | grep :8080 || echo "Port 8080 not listening"
+          
+          echo ""
+          echo "📊 Recent Logs:"
+          journalctl -u k8s-realtime-log-viewer --no-pager -n 10
+        EOF
+        
+        echo "✅ Deployment verification completed"
+    
+    - name: Deployment Summary
+      run: |
+        echo "🎉 K8s Real-Time Log Viewer Deployment Summary"
+        echo "=============================================="
+        echo ""
+        echo "✅ Files deployed:"
+        echo "   - k8s-realtime-log-viewer.sh"
+        echo ""
+        echo "🌐 Access URL:"
+        echo "   http://$DROPLET_IP:8080"
+        echo ""
+        echo "🔧 Service: k8s-realtime-log-viewer"
+        echo ""
+        echo "📝 Next steps:"
+        echo "   1. Open http://$DROPLET_IP:8080 in your browser"
+        echo "   2. Click 'Start Streaming' to begin"
+        echo "   3. Watch logs from all your k8s pods in real-time!"
+        echo ""
+        echo "🛠️ Management commands:"
+        echo "   - systemctl status k8s-realtime-log-viewer"
+        echo "   - systemctl restart k8s-realtime-log-viewer"
+        echo "   - journalctl -u k8s-realtime-log-viewer -f" 
