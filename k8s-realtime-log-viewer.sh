@@ -78,7 +78,7 @@ class K8sRealTimeLogHandler(http.server.SimpleHTTPRequestHandler):
     <div class="container">
         <div class="header">
             <h1>🔴 K8s Real-Time Log Viewer</h1>
-            <p>Live streaming logs from all Kubernetes pods</p>
+            <p>Live streaming logs from your application services only</p>
         </div>
         
         <div class="stats" id="stats">
@@ -244,19 +244,30 @@ class K8sRealTimeLogHandler(http.server.SimpleHTTPRequestHandler):
     def stream_logs(self):
         """Stream logs in real-time using Server-Sent Events"""
         try:
-            # Get all pods in all namespaces
-            result = subprocess.run(['kubectl', 'get', 'pods', '--all-namespaces', '--no-headers', '-o', 'custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name'], 
-                                 capture_output=True, text=True)
-            pod_lines = result.stdout.strip().split('\n')
+            # Define your application namespaces and pod patterns
+            # Add your specific namespaces and pod name patterns here
+            app_namespaces = ['default', 'feed-ingestion']  # Add your namespaces
+            app_pod_patterns = ['fastapi', 'feed', 'ingestion', 'celery', 'worker']  # Add your pod name patterns
             
-            # Start monitoring each pod
-            for line in pod_lines:
-                if line.strip():
-                    parts = line.split()
-                    if len(parts) >= 2:
-                        namespace = parts[0]
-                        pod_name = parts[1]
-                        threading.Thread(target=self.monitor_pod, args=(namespace, pod_name), daemon=True).start()
+            # Get pods from your application namespaces only
+            all_pods = []
+            for namespace in app_namespaces:
+                try:
+                    result = subprocess.run(['kubectl', 'get', 'pods', '-n', namespace, '--no-headers', '-o', 'custom-columns=NAME:.metadata.name'], 
+                                         capture_output=True, text=True)
+                    if result.stdout.strip():
+                        for pod_name in result.stdout.strip().split('\n'):
+                            if pod_name.strip():
+                                # Check if pod name matches any of your patterns
+                                pod_lower = pod_name.lower()
+                                if any(pattern.lower() in pod_lower for pattern in app_pod_patterns):
+                                    all_pods.append((namespace, pod_name.strip()))
+                except Exception as e:
+                    print(f"Error getting pods from namespace {namespace}: {e}")
+            
+            # Start monitoring each application pod
+            for namespace, pod_name in all_pods:
+                threading.Thread(target=self.monitor_pod, args=(namespace, pod_name), daemon=True).start()
             
             # Keep connection alive and send heartbeat
             while True:
@@ -387,7 +398,7 @@ echo "🔴 Features:"
 echo "   - REAL-TIME streaming (logs appear as they happen)"
 echo "   - Live statistics (total logs, errors, warnings, pods, namespaces)"
 echo "   - Color-coded log levels"
-echo "   - All Kubernetes pods"
+echo "   - Your application services only (no system pods)"
 echo "   - Namespace information"
 echo "   - Auto-scroll to bottom"
 echo ""
