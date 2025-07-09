@@ -937,7 +937,7 @@ async def root():
                     // Combine summary and content for display
                     let feedText = '';
                     if (item.summary) feedText += item.summary;
-                    if (item.content) feedText += (feedText ? '\n\n' : '') + item.content;
+                    if (item.content) feedText += (feedText ? '\\n\\n' : '') + item.content;
                     // Card layout with expandable text
                     const textId = `feed-card-text-${idx}`;
                     const moreId = `feed-card-more-${idx}`;
