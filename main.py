@@ -542,6 +542,11 @@ async def root():
                 background: #f8d7da;
                 color: #721c24;
                 margin-top: 20px;
+                padding: 6px 16px;
+                font-size: 0.95em;
+                width: auto;
+                min-width: 0;
+                border-radius: 6px;
             }
             
             .logout-btn:hover {
@@ -631,10 +636,11 @@ async def root():
             <div class="feed-header">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <div>
-                        <h1>Welcome to Your Feed! 📰</h1>
+                        <h1 id="feed-header-title">Welcome to Your Feed! 📰</h1>
                         <p>Here are your personalized news briefings</p>
                     </div>
-                    <div id="digital-clock" style="background: #f8f9fa; padding: 10px 15px; border-radius: 8px; font-family: monospace; font-size: 1.1em; color: #495057; border: 1px solid #dee2e6;"></div>
+                    <div id="digital-clock" style="background: #23272f; color: #a8d5ba; padding: 14px 28px; border-radius: 16px; font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace; font-size: 1.45em; font-weight: 600; letter-spacing: 0.04em; box-shadow: 0 2px 12px rgba(40,60,80,0.10); border: none; display: inline-block; margin-left: 10px;">
+                    </div>
                 </div>
                 <button class="logout-btn" onclick="logout()">Logout</button>
             </div>
@@ -650,7 +656,6 @@ async def root():
                         <input type="text" id="new-category" placeholder="Enter category name (max 140 chars)" maxlength="140">
                         <button onclick="addCategory()">Add Category</button>
                     </div>
-                    <button id="refresh-briefings-btn" style="margin-top:20px;width:100%;background:#a8d5ba;color:#2c3e50;border:none;border-radius:6px;padding:10px;font-size:14px;cursor:pointer;transition:all 0.2s;" onclick="refreshBriefings()">Refresh my briefings</button>
                 </div>
                 
                 <div class="feed-content">
@@ -759,6 +764,20 @@ async def root():
                 currentOffset = offset;
                 currentCategoryFilter = categoryFilter;
                 try {
+                    // Fetch user info for header
+                    let userResp = await fetch('/auth/me', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    let username = '';
+                    if (userResp.ok) {
+                        const userData = await userResp.json();
+                        username = userData.username;
+                    }
+                    // Set header
+                    const headerTitle = document.getElementById('feed-header-title');
+                    if (headerTitle && username) {
+                        headerTitle.textContent = `Feed for ${username}`;
+                    }
                     let url = `/feed?limit=${FEED_LIMIT}&offset=${offset}`;
                     if (categoryFilter) {
                         url += `&category=${encodeURIComponent(categoryFilter)}`;
