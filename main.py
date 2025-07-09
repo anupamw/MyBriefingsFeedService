@@ -1287,30 +1287,36 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
 async def get_feed(limit: int = 25, offset: int = 0, category: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     """Get feed items with pagination (protected route)"""
     db = SessionLocal()
-    query = db.query(FeedItemDB).order_by(
-        FeedItemDB.published_at.desc(),
-        FeedItemDB.created_at.desc()
-    )
-    
-    # Filter by category if specified
-    if category:
-        query = query.filter(FeedItemDB.category == category)
-    
-    items = query.offset(offset).limit(limit).all()
-    result = []
-    for item in items:
-        result.append(FeedItem(
-            id=item.id,
-            summary=item.summary,
-            content=item.content,
-            url=item.url,
-            source=item.source,
-            published_at=item.published_at.isoformat() if item.published_at else None,
-            created_at=item.created_at.isoformat() if item.created_at else None,
-            category=item.category
-        ))
-    db.close()
-    return result
+    try:
+        # If a category is specified, filter by it (existing behavior)
+        if category:
+            query = db.query(FeedItemDB).filter(FeedItemDB.category == category)
+        else:
+            # Check if user has any categories
+            user_categories = db.query(UserCategoryDB).filter(UserCategoryDB.user_id == current_user["id"]).all()
+            if user_categories:
+                category_names = [cat.category_name for cat in user_categories]
+                query = db.query(FeedItemDB).filter(FeedItemDB.category.in_(category_names))
+            else:
+                # No user categories, show only the global feed for the single common category
+                query = db.query(FeedItemDB).filter(FeedItemDB.category == "What is the happening in the world right now?")
+        query = query.order_by(FeedItemDB.published_at.desc(), FeedItemDB.created_at.desc())
+        items = query.offset(offset).limit(limit).all()
+        result = []
+        for item in items:
+            result.append(FeedItem(
+                id=item.id,
+                summary=item.summary,
+                content=item.content,
+                url=item.url,
+                source=item.source,
+                published_at=item.published_at.isoformat() if item.published_at else None,
+                created_at=item.created_at.isoformat() if item.created_at else None,
+                category=item.category
+            ))
+        return result
+    finally:
+        db.close()
 
 @app.get("/feed/{item_id}", response_model=FeedItem)
 async def get_feed_item(item_id: int, current_user: dict = Depends(get_current_user)):
