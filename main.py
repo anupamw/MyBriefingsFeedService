@@ -786,7 +786,7 @@ async def root():
             }
             
             let currentOffset = 0;
-            const FEED_LIMIT = 25;
+            const FEED_LIMIT = 10;
             let currentCategoryFilter = null;
 
             async function showFeed(offset = 0, categoryFilter = null) {
@@ -847,7 +847,7 @@ async def root():
                 prevBtn.textContent = '← Previous';
                 prevBtn.disabled = currentOffset === 0;
                 prevBtn.onclick = () => showFeed(Math.max(0, currentOffset - FEED_LIMIT), currentCategoryFilter);
-                prevBtn.style.cssText = 'background: #a8d5ba; color: #2c3e50; border: none; border-radius: 6px; padding: 5px 10px; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.2s; margin-right: 10px;';
+                prevBtn.style.cssText = 'background: #a8d5ba; color: #2c3e50; border: none; border-radius: 6px; padding: 3px 8px; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.2s; margin-right: 10px;';
                 if (prevBtn.disabled) prevBtn.style.opacity = '0.5';
                 controls.appendChild(prevBtn);
                 
@@ -862,7 +862,7 @@ async def root():
                 nextBtn.textContent = 'Next →';
                 nextBtn.disabled = feedLength < FEED_LIMIT;
                 nextBtn.onclick = () => showFeed(currentOffset + FEED_LIMIT, currentCategoryFilter);
-                nextBtn.style.cssText = 'background: #a8d5ba; color: #2c3e50; border: none; border-radius: 6px; padding: 5px 10px; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.2s; margin-left: 10px;';
+                nextBtn.style.cssText = 'background: #a8d5ba; color: #2c3e50; border: none; border-radius: 6px; padding: 3px 8px; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.2s; margin-left: 10px;';
                 if (nextBtn.disabled) nextBtn.style.opacity = '0.5';
                 controls.appendChild(nextBtn);
             }
@@ -1047,7 +1047,7 @@ async def root():
                     filterHeader.style.cssText = 'background:#f8f9fa;padding:15px;border-radius:10px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;';
                     filterHeader.innerHTML = `
                         <span style="font-weight:600;color:#333;">Showing feeds from: <span style="color:#a8d5ba;">${currentCategoryFilter}</span></span>
-                        <button onclick="clearCategoryFilter()" style="background:#f8d7da;color:#721c24;border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:500;cursor:pointer;transition:all 0.2s;">Clear Filter</button>
+                        <button onclick="clearCategoryFilter()" style="background:#f8d7da;color:#721c24;border:none;border-radius:6px;padding:4px 8px;font-size:12px;font-weight:500;cursor:pointer;transition:all 0.2s;">Clear Filter</button>
                     `;
                     container.appendChild(filterHeader);
                 }
@@ -1386,7 +1386,7 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     )
 
 @app.get("/feed", response_model=List[FeedItem])
-async def get_feed(limit: int = 25, offset: int = 0, category: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+async def get_feed(limit: int = 10, offset: int = 0, category: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     """Get feed items with pagination (protected route)"""
     db = SessionLocal()
     try:
