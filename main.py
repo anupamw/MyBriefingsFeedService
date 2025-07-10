@@ -901,6 +901,7 @@ async def root():
                     categoryDiv.className = 'category-item';
                     // Properly escape the category name for JavaScript
                     const escapedCategoryName = category.category_name.replace(/'/g, "\\'").replace(/"/g, '\\"');
+                    console.log(`Category: "${category.category_name}" -> Escaped: "${escapedCategoryName}"`);
                     categoryDiv.innerHTML = `
                         <span class="category-name" style="cursor: pointer; color: #a8d5ba; text-decoration: underline;" onclick="filterByCategory('${escapedCategoryName}')">${category.category_name}</span>
                         <button class="delete-category" onclick="deleteCategory(${category.id})">×</button>
