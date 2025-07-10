@@ -273,6 +273,16 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 items_db = []
 item_id_counter = 1
 
+# Helper function for UTC ISO string with 'Z'
+def to_utc_z(dt):
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.isoformat().replace('+00:00', 'Z')
+
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """Serve the main application page"""
@@ -644,15 +654,10 @@ async def root():
                         <h1 id="feed-header-title">Welcome to Your Feed! 📰</h1>
                         <p>Here are your personalized news briefings</p>
                     </div>
-                    <div style="display: flex; flex-direction: column; align-items: flex-end;">
-                        <div id="digital-clock" style="background: #f8f9fa; color: #495057; padding: 7px 16px; border-radius: 8px; font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace; font-size: 1.05em; font-weight: 500; letter-spacing: 0.01em; box-shadow: 0 1px 4px rgba(40,60,80,0.06); border: 1px solid #dee2e6; display: inline-block; margin-left: 10px;"></div>
-                        <button id="refresh-feed-btn" style="background: #a8d5ba; color: #2c3e50; border: none; border-radius: 6px; padding: 2px 8px; font-size: 0.85em; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-top: 6px; height: 26px; min-width: 0; width: auto;" onclick="refreshFeed()">🔄</button>
+                    <div id="digital-clock" style="background: #f8f9fa; color: #495057; padding: 7px 16px; border-radius: 8px; font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace; font-size: 1.05em; font-weight: 500; letter-spacing: 0.01em; box-shadow: 0 1px 4px rgba(40,60,80,0.06); border: 1px solid #dee2e6; display: inline-block; margin-left: 10px;">
                     </div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-                    <button class="logout-btn" onclick="logout()">Logout</button>
-                </div>
-                <div id="refresh-info-message" style="display:none; color: #856404; background: #fff3cd; border: 1px solid #ffeeba; border-radius: 6px; padding: 10px; margin-top: 10px; font-size: 0.98em; font-weight: 500;"></div>
+                <button class="logout-btn" onclick="logout()">Logout</button>
             </div>
             
             <div class="main-content">
@@ -677,7 +682,6 @@ async def root():
         
         <script>
             let feedRefreshInterval = null;
-            let userIngestionInterval = null;
 
             function startPeriodicFeedRefresh() {
                 if (feedRefreshInterval) clearInterval(feedRefreshInterval);
@@ -699,27 +703,12 @@ async def root():
                 }
             }
 
-            function startUserIngestionInterval() {
-                if (userIngestionInterval) clearInterval(userIngestionInterval);
-                userIngestionInterval = setInterval(() => {
-                    triggerFeedGeneration(); // Triggers ingestion for the current user
-                }, 900000); // 15 minutes
-            }
-
-            function stopUserIngestionInterval() {
-                if (userIngestionInterval) {
-                    clearInterval(userIngestionInterval);
-                    userIngestionInterval = null;
-                }
-            }
-
             // Call this after login, after adding/deleting a category, or on page load
             document.addEventListener('DOMContentLoaded', function() {
                 let currentToken = localStorage.getItem('token');
                 if (currentToken) {
                     showFeed();
                     startPeriodicFeedRefresh();
-                    startUserIngestionInterval();
                 }
             });
             
@@ -769,7 +758,6 @@ async def root():
                         localStorage.setItem('token', data.access_token);
                         showFeed();
                         startPeriodicFeedRefresh();
-                        startUserIngestionInterval();
                     } else {
                         showError(data.detail);
                     }
@@ -1163,7 +1151,6 @@ async def root():
                 document.getElementById('login-form').classList.add('active');
                 document.getElementById('signup-form').classList.remove('active');
                 stopPeriodicFeedRefresh();
-                stopUserIngestionInterval();
             }
             
             function showError(message) {
@@ -1226,38 +1213,45 @@ async def root():
                 successDiv.textContent = message;
             }
 
-            async function refreshFeed() {
+            async function refreshBriefings() {
                 const token = localStorage.getItem('token');
                 if (!token) return;
-                // Show info message
-                const infoDiv = document.getElementById('refresh-info-message');
-                infoDiv.textContent = 'Refreshing your feed, this may take a few seconds...';
-                infoDiv.style.display = 'block';
-                setTimeout(() => {
-                    infoDiv.style.display = 'none';
-                }, 5000);
+                
+                // Show loading state
+                const refreshBtn = document.getElementById('refresh-briefings-btn');
+                const originalText = refreshBtn.textContent;
+                refreshBtn.textContent = '🔄 Refreshing...';
+                refreshBtn.disabled = true;
+                
                 try {
-                    // Get current user info to get user_id
-                    const userResp = await fetch('/auth/me', {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
-                    if (!userResp.ok) return;
-                    const userData = await userResp.json();
-                    // Call the ingestion endpoint with correct format
-                    const resp = await fetch(`http://64.227.134.87:30101/ingest/perplexity?user_id=${userData.id}`, {
+                    // Trigger the ingestion
+                    const response = await fetch('/ingestion/ingest/perplexity', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' }
-                    });
-                    if (resp.ok) {
-                        const data = await resp.json();
-                        if (data.task_id) {
-                            await pollTaskCompletion(data.task_id);
+                        headers: {
+                            'Authorization': `Bearer ${token}`
                         }
-                        // Reload the feed after completion
-                        await showFeed(0, null);
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        showSuccess('Briefings refresh started! Waiting for completion...');
+                        
+                        // Poll for task completion
+                        await pollTaskCompletion(data.task_id);
+                        
+                        // Reload the feed
+                        await loadFeed();
+                        showSuccess('Briefings refreshed successfully!');
+                    } else {
+                        const data = await response.json();
+                        showError(data.detail || 'Failed to trigger refresh.');
                     }
                 } catch (error) {
-                    showError('Failed to refresh feed.');
+                    showError('Failed to trigger refresh.');
+                } finally {
+                    // Restore button state
+                    refreshBtn.textContent = originalText;
+                    refreshBtn.disabled = false;
                 }
             }
             
