@@ -39,6 +39,7 @@ class PerplexityCallHistory(Base):
 Base.metadata.create_all(bind=engine)
 
 def add_perplexity_history_db(category, prompt, response_word_count, http_status_code):
+    print(f"[DEBUG] Attempting to log Perplexity call: category={category}, prompt={prompt[:60]}, response_word_count={response_word_count}, http_status_code={http_status_code}")
     db = SessionLocal()
     try:
         record = PerplexityCallHistory(
@@ -50,6 +51,9 @@ def add_perplexity_history_db(category, prompt, response_word_count, http_status
         )
         db.add(record)
         db.commit()
+        print(f"[DEBUG] Successfully logged Perplexity call to DB (id={record.id})")
+    except Exception as e:
+        print(f"[ERROR] Failed to log Perplexity call: {e}")
     finally:
         db.close()
 
