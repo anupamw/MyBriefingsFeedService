@@ -4,7 +4,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import List, Optional
 import uvicorn
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 from dotenv import load_dotenv
 import jwt
@@ -272,6 +272,16 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 # Note: Users and feed data are stored in SQLite database
 items_db = []
 item_id_counter = 1
+
+# Helper function for UTC ISO string with 'Z'
+def to_utc_z(dt):
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.isoformat().replace('+00:00', 'Z')
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -1349,7 +1359,7 @@ async def signup(user: UserCreate):
         id=db_user.id,
         username=db_user.username,
         email=db_user.email,
-        created_at=db_user.created_at.isoformat() if db_user.created_at else None
+        created_at=to_utc_z(db_user.created_at)
     )
 
 @app.post("/auth/login", response_model=Token)
@@ -1377,7 +1387,7 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
         id=current_user["id"],
         username=current_user["username"],
         email=current_user["email"],
-        created_at=current_user["created_at"]
+        created_at=to_utc_z(datetime.fromisoformat(current_user["created_at"])) if current_user["created_at"] else None
     )
 
 @app.get("/feed", response_model=List[FeedItem])
@@ -1401,14 +1411,17 @@ async def get_feed(limit: int = 10, offset: int = 0, category: Optional[str] = N
         items = query.offset(offset).limit(limit).all()
         result = []
         for item in items:
+            # Ensure published_at and created_at are always UTC ISO strings with 'Z'
+            published_at_str = to_utc_z(item.published_at)
+            created_at_str = to_utc_z(item.created_at)
             result.append(FeedItem(
                 id=item.id,
                 summary=item.summary,
                 content=item.content,
                 url=item.url,
                 source=item.source,
-                published_at=item.published_at.isoformat() if item.published_at else None,
-                created_at=item.created_at.isoformat() if item.created_at else None,
+                published_at=published_at_str,
+                created_at=created_at_str,
                 category=item.category
             ))
         return result
@@ -1419,21 +1432,22 @@ async def get_feed(limit: int = 10, offset: int = 0, category: Optional[str] = N
 async def get_feed_item(item_id: int, current_user: dict = Depends(get_current_user)):
     """Get a specific feed item by ID (protected route)"""
     db = SessionLocal()
-    
     item = db.query(FeedItemDB).filter(FeedItemDB.id == item_id).first()
     db.close()
-    
     if not item:
         raise HTTPException(status_code=404, detail="Feed item not found")
-    
+    # Ensure published_at and created_at are always UTC ISO strings with 'Z'
+    published_at_str = to_utc_z(item.published_at)
+    created_at_str = to_utc_z(item.created_at)
     return FeedItem(
         id=item.id,
         summary=item.summary,
         content=item.content,
         url=item.url,
         source=item.source,
-        published_at=item.published_at.isoformat() if item.published_at else None,
-        created_at=item.created_at.isoformat() if item.created_at else None
+        published_at=published_at_str,
+        created_at=created_at_str,
+        category=item.category
     )
 
 # User Categories endpoints
@@ -1452,7 +1466,7 @@ async def get_user_categories(current_user: dict = Depends(get_current_user)):
             id=category.id,
             user_id=category.user_id,
             category_name=category.category_name,
-            created_at=category.created_at.isoformat() if category.created_at else None
+            created_at=to_utc_z(category.created_at)
         ))
     
     db.close()
@@ -1505,7 +1519,7 @@ async def create_user_category(
         id=db_category.id,
         user_id=db_category.user_id,
         category_name=db_category.category_name,
-        created_at=db_category.created_at.isoformat() if db_category.created_at else None
+        created_at=to_utc_z(db_category.created_at)
     )
 
 @app.delete("/user/categories/{category_id}")

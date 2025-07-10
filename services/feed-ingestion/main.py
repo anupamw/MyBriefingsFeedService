@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import uvicorn
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 from dotenv import load_dotenv
 import json
@@ -101,6 +101,16 @@ def parse_tags(tags_data):
             return []
     return []
 
+# Helper function for UTC ISO string with 'Z'
+def to_utc_z(dt):
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.isoformat().replace('+00:00', 'Z')
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize database on startup and trigger full ingestion for all users"""
@@ -133,9 +143,9 @@ async def get_data_sources(db: SessionLocal = Depends(get_db)):
             base_url=source.base_url,
             rate_limit_per_minute=source.rate_limit_per_minute,
             is_active=source.is_active,
-            last_used=source.last_used.isoformat() if source.last_used else None,
-            created_at=source.created_at.isoformat(),
-            updated_at=source.updated_at.isoformat()
+            last_used=to_utc_z(source.last_used),
+            created_at=to_utc_z(source.created_at),
+            updated_at=to_utc_z(source.updated_at)
         )
         for source in sources
     ]
@@ -168,9 +178,9 @@ async def create_data_source(source: DataSourceCreate, db: SessionLocal = Depend
         base_url=db_source.base_url,
         rate_limit_per_minute=db_source.rate_limit_per_minute,
         is_active=db_source.is_active,
-        last_used=db_source.last_used.isoformat() if db_source.last_used else None,
-        created_at=db_source.created_at.isoformat(),
-        updated_at=db_source.updated_at.isoformat()
+        last_used=to_utc_z(db_source.last_used),
+        created_at=to_utc_z(db_source.created_at),
+        updated_at=to_utc_z(db_source.updated_at)
     )
 
 @app.put("/data-sources/{source_id}/toggle")
@@ -207,13 +217,13 @@ async def get_ingestion_jobs(
             id=job.id,
             job_type=job.job_type,
             status=job.status,
-            started_at=job.started_at.isoformat() if job.started_at else None,
-            completed_at=job.completed_at.isoformat() if job.completed_at else None,
+            started_at=to_utc_z(job.started_at),
+            completed_at=to_utc_z(job.completed_at),
             error_message=job.error_message,
             items_processed=job.items_processed,
             items_created=job.items_created,
             items_updated=job.items_updated,
-            created_at=job.created_at.isoformat()
+            created_at=to_utc_z(job.created_at)
         )
         for job in jobs
     ]
@@ -336,8 +346,8 @@ async def get_feed_items(
             content=item.content,
             url=item.url,
             source=item.source,
-            published_at=item.published_at.isoformat() if item.published_at else None,
-            created_at=item.created_at.isoformat(),
+            published_at=to_utc_z(item.published_at),
+            created_at=to_utc_z(item.created_at),
             category=item.category,
             engagement_score=item.engagement_score,
             tags=parse_tags(item.tags)
@@ -379,8 +389,8 @@ async def get_user_feed_items(
             content=item.content,
             url=item.url,
             source=item.source,
-            published_at=item.published_at.isoformat() if item.published_at else None,
-            created_at=item.created_at.isoformat(),
+            published_at=to_utc_z(item.published_at),
+            created_at=to_utc_z(item.created_at),
             category=item.category,
             engagement_score=item.engagement_score,
             tags=parse_tags(item.tags)
@@ -402,7 +412,7 @@ async def get_user_categories(user_id: int, db: SessionLocal = Depends(get_db)):
             "category_name": cat.category_name,
             "keywords": cat.keywords or [],
             "sources": cat.sources or [],
-            "created_at": cat.created_at.isoformat()
+            "created_at": to_utc_z(cat.created_at)
         }
         for cat in categories
     ]
@@ -530,7 +540,7 @@ async def debug_user_feed(user_id: int, db: SessionLocal = Depends(get_db)):
                 "id": item.id,
                 "title": item.title,
                 "category": item.category,
-                "published_at": item.published_at.isoformat() if item.published_at else None
+                "published_at": to_utc_z(item.published_at) if item.published_at else None
             }
             for item in feed_items
         ]
@@ -687,7 +697,7 @@ async def get_category_ingestion_history(
             for job_time, items in time_groups.items():
                 history.append({
                     "category": cat_name,
-                    "job_timestamp": job_time.isoformat(),
+                    "job_timestamp": to_utc_z(job_time),
                     "items_created": len(items),
                     "latest_item_id": max(item.id for item in items),
                     "earliest_item_id": min(item.id for item in items),
@@ -727,9 +737,9 @@ async def get_category_status(user_id: int, db: SessionLocal = Depends(get_db)):
             "category_id": category.id,
             "category_name": category.category_name,
             "has_feed_items": len(feed_items) > 0,
-            "latest_item_created": latest_item.created_at.isoformat() if latest_item else None,
+            "latest_item_created": to_utc_z(latest_item.created_at) if latest_item else None,
             "latest_item_id": latest_item.id if latest_item else None,
-            "category_created": category.created_at.isoformat(),
+            "category_created": to_utc_z(category.created_at),
             "days_since_category_created": (datetime.utcnow() - category.created_at).days,
             "days_since_last_item": (datetime.utcnow() - latest_item.created_at).days if latest_item else None,
             "minutes_since_last_item": int((datetime.utcnow() - latest_item.created_at).total_seconds() / 60) if latest_item else None
