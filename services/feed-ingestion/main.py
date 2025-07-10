@@ -731,7 +731,8 @@ async def get_category_status(user_id: int, db: SessionLocal = Depends(get_db)):
             "latest_item_id": latest_item.id if latest_item else None,
             "category_created": category.created_at.isoformat(),
             "days_since_category_created": (datetime.utcnow() - category.created_at).days,
-            "days_since_last_item": (datetime.utcnow() - latest_item.created_at).days if latest_item else None
+            "days_since_last_item": (datetime.utcnow() - latest_item.created_at).days if latest_item else None,
+            "minutes_since_last_item": int((datetime.utcnow() - latest_item.created_at).total_seconds() / 60) if latest_item else None
         })
     
     return {
