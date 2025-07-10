@@ -436,10 +436,17 @@ async def root():
                 color: #721c24;
                 border: none;
                 border-radius: 4px;
-                padding: 4px 8px;
-                font-size: 12px;
+                padding: 2px 6px;
+                font-size: 10px;
                 cursor: pointer;
                 transition: all 0.2s;
+                width: 20px;
+                height: 20px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 20px;
+                flex-shrink: 0;
             }
             
             .delete-category:hover {
@@ -830,15 +837,33 @@ async def root():
             function updatePaginationControls(feedLength) {
                 const controls = document.getElementById('pagination-controls');
                 controls.innerHTML = '';
+                
+                // Calculate current page and total pages
+                const currentPage = Math.floor(currentOffset / FEED_LIMIT) + 1;
+                const totalPages = Math.ceil(feedLength / FEED_LIMIT) + (feedLength === FEED_LIMIT ? 1 : 0);
+                
+                // Previous button
                 const prevBtn = document.createElement('button');
-                prevBtn.textContent = 'Previous';
+                prevBtn.textContent = '← Previous';
                 prevBtn.disabled = currentOffset === 0;
                 prevBtn.onclick = () => showFeed(Math.max(0, currentOffset - FEED_LIMIT), currentCategoryFilter);
+                prevBtn.style.cssText = 'background: #a8d5ba; color: #2c3e50; border: none; border-radius: 10px; padding: 8px 16px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-right: 10px;';
+                if (prevBtn.disabled) prevBtn.style.opacity = '0.5';
                 controls.appendChild(prevBtn);
+                
+                // Page numbers
+                const pageInfo = document.createElement('span');
+                pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+                pageInfo.style.cssText = 'color: #666; font-size: 14px; font-weight: 500; margin: 0 15px;';
+                controls.appendChild(pageInfo);
+                
+                // Next button
                 const nextBtn = document.createElement('button');
-                nextBtn.textContent = 'Next';
+                nextBtn.textContent = 'Next →';
                 nextBtn.disabled = feedLength < FEED_LIMIT;
                 nextBtn.onclick = () => showFeed(currentOffset + FEED_LIMIT, currentCategoryFilter);
+                nextBtn.style.cssText = 'background: #a8d5ba; color: #2c3e50; border: none; border-radius: 10px; padding: 8px 16px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-left: 10px;';
+                if (nextBtn.disabled) nextBtn.style.opacity = '0.5';
                 controls.appendChild(nextBtn);
             }
             
@@ -874,8 +899,10 @@ async def root():
                 categories.forEach(category => {
                     const categoryDiv = document.createElement('div');
                     categoryDiv.className = 'category-item';
+                    // Properly escape the category name for JavaScript
+                    const escapedCategoryName = category.category_name.replace(/'/g, "\\'").replace(/"/g, '\\"');
                     categoryDiv.innerHTML = `
-                        <span class="category-name" style="cursor: pointer; color: #a8d5ba; text-decoration: underline;" onclick="filterByCategory('${category.category_name}')">${category.category_name}</span>
+                        <span class="category-name" style="cursor: pointer; color: #a8d5ba; text-decoration: underline;" onclick="filterByCategory('${escapedCategoryName}')">${category.category_name}</span>
                         <button class="delete-category" onclick="deleteCategory(${category.id})">×</button>
                     `;
                     container.appendChild(categoryDiv);
@@ -985,7 +1012,7 @@ async def root():
                     filterHeader.style.cssText = 'background:#f8f9fa;padding:15px;border-radius:10px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;';
                     filterHeader.innerHTML = `
                         <span style="font-weight:600;color:#333;">Showing feeds from: <span style="color:#a8d5ba;">${currentCategoryFilter}</span></span>
-                        <button onclick="clearCategoryFilter()" style="background:#f8d7da;color:#721c24;border:none;border-radius:5px;padding:8px 12px;cursor:pointer;transition:all 0.2s;">Clear Filter</button>
+                        <button onclick="clearCategoryFilter()" style="background:#f8d7da;color:#721c24;border:none;border-radius:10px;padding:12px;font-size:16px;font-weight:600;cursor:pointer;transition:all 0.2s;">Clear Filter</button>
                     `;
                     container.appendChild(filterHeader);
                 }
@@ -1025,7 +1052,7 @@ async def root():
                             <!-- Card Header -->
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
                                 <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span style="background: #a8d5ba; color: #2c3e50; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; cursor: pointer;" onclick="filterByCategory('${item.category || 'Uncategorized'}')">${item.category || 'Uncategorized'}</span>
+                                    <span style="background: #a8d5ba; color: #2c3e50; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; cursor: pointer;" onclick="filterByCategory('${(item.category || 'Uncategorized').replace(/'/g, "\\'").replace(/"/g, '\\"')}')">${item.category || 'Uncategorized'}</span>
                                     <span style="color: #666; font-size: 0.85em;">•</span>
                                     <span style="color: #666; font-size: 0.85em;">${item.source || 'Unknown'}</span>
                                 </div>
