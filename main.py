@@ -900,7 +900,10 @@ async def root():
                     const categoryDiv = document.createElement('div');
                     categoryDiv.className = 'category-item';
                     // Properly escape the category name for JavaScript
-                    const escapedCategoryName = category.category_name.replace(/'/g, "\\'").replace(/"/g, '\\"');
+                    const escapedCategoryName = category.category_name
+                        .replace(/\\/g, '\\\\')  // Escape backslashes first
+                        .replace(/'/g, "\\'")    // Escape single quotes
+                        .replace(/"/g, '\\"');   // Escape double quotes
                     console.log(`Category: "${category.category_name}" -> Escaped: "${escapedCategoryName}"`);
                     categoryDiv.innerHTML = `
                         <span class="category-name" style="cursor: pointer; color: #a8d5ba; text-decoration: underline;" onclick="filterByCategory('${escapedCategoryName}')">${category.category_name}</span>
@@ -1084,7 +1087,7 @@ async def root():
                             <!-- Card Header -->
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
                                 <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span style="background: #a8d5ba; color: #2c3e50; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; cursor: pointer;" onclick="filterByCategory('${(item.category || 'Uncategorized').replace(/'/g, "\\'").replace(/"/g, '\\"')}')">${item.category || 'Uncategorized'}</span>
+                                    <span style="background: #a8d5ba; color: #2c3e50; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; cursor: pointer;" onclick="filterByCategory('${(item.category || 'Uncategorized').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"')}')">${item.category || 'Uncategorized'}</span>
                                     <span style="color: #666; font-size: 0.85em;">•</span>
                                     <span style="color: #666; font-size: 0.85em;">${item.source || 'Unknown'}</span>
                                 </div>
