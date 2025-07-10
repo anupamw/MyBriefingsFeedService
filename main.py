@@ -503,7 +503,6 @@ async def root():
                 box-shadow: 0 4px 15px rgba(0,0,0,0.08);
                 border: 1px solid #e9ecef;
                 transition: all 0.3s ease;
-                min-height: 200px;
                 position: relative;
                 overflow: hidden;
             }
@@ -582,7 +581,6 @@ async def root():
                 overflow: hidden;
                 text-overflow: ellipsis;
                 transition: max-height 0.3s;
-                max-height: 7.5em;
             }
             .feed-card-text.expanded {
                 -webkit-line-clamp: unset;
@@ -1080,7 +1078,7 @@ async def root():
                     // Estimate if text is longer than 5 lines (roughly > 500 chars or > 400px height)
                     if (feedText.length > 500) needsMore = true;
                     itemDiv.innerHTML = `
-                        <div style="display: flex; flex-direction: column; height: 100%;">
+                        <div style="display: flex; flex-direction: column;">
                             <!-- Card Header -->
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
                                 <div style="display: flex; align-items: center; gap: 8px;">
@@ -1094,7 +1092,7 @@ async def root():
                                 </div>
                             </div>
                             <!-- Card Content -->
-                            <div style="flex: 1; display: flex; flex-direction: column;">
+                            <div style="display: flex; flex-direction: column;">
                                 <div id="${textId}" class="feed-card-text">${feedText.replace(/\\n/g, '<br>')}</div>
                                 ${needsMore ? `<span id="${moreId}" class="feed-card-more" onclick="toggleFeedCardText('${textId}', '${moreId}')">More</span>` : ''}
                             </div>
