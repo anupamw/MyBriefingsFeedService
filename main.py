@@ -847,7 +847,7 @@ async def root():
                 prevBtn.textContent = '← Previous';
                 prevBtn.disabled = currentOffset === 0;
                 prevBtn.onclick = () => showFeed(Math.max(0, currentOffset - FEED_LIMIT), currentCategoryFilter);
-                prevBtn.style.cssText = 'background: #a8d5ba; color: #2c3e50; border: none; border-radius: 10px; padding: 8px 16px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-right: 10px;';
+                prevBtn.style.cssText = 'background: #a8d5ba; color: #2c3e50; border: none; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.2s; margin-right: 10px;';
                 if (prevBtn.disabled) prevBtn.style.opacity = '0.5';
                 controls.appendChild(prevBtn);
                 
@@ -862,7 +862,7 @@ async def root():
                 nextBtn.textContent = 'Next →';
                 nextBtn.disabled = feedLength < FEED_LIMIT;
                 nextBtn.onclick = () => showFeed(currentOffset + FEED_LIMIT, currentCategoryFilter);
-                nextBtn.style.cssText = 'background: #a8d5ba; color: #2c3e50; border: none; border-radius: 10px; padding: 8px 16px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-left: 10px;';
+                nextBtn.style.cssText = 'background: #a8d5ba; color: #2c3e50; border: none; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.2s; margin-left: 10px;';
                 if (nextBtn.disabled) nextBtn.style.opacity = '0.5';
                 controls.appendChild(nextBtn);
             }
@@ -1043,7 +1043,7 @@ async def root():
                     filterHeader.style.cssText = 'background:#f8f9fa;padding:15px;border-radius:10px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;';
                     filterHeader.innerHTML = `
                         <span style="font-weight:600;color:#333;">Showing feeds from: <span style="color:#a8d5ba;">${currentCategoryFilter}</span></span>
-                        <button onclick="clearCategoryFilter()" style="background:#f8d7da;color:#721c24;border:none;border-radius:10px;padding:12px;font-size:16px;font-weight:600;cursor:pointer;transition:all 0.2s;">Clear Filter</button>
+                        <button onclick="clearCategoryFilter()" style="background:#f8d7da;color:#721c24;border:none;border-radius:8px;padding:8px 12px;font-size:14px;font-weight:500;cursor:pointer;transition:all 0.2s;">Clear Filter</button>
                     `;
                     container.appendChild(filterHeader);
                 }
