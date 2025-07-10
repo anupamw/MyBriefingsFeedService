@@ -172,7 +172,7 @@ class PerplexityRunner:
         self.db.commit()
     
     def query_perplexity(self, query: str, model: str = "sonar", category: str = None) -> Optional[Dict]:
-        """Query Perplexity API"""
+        print(f"[DEBUG] query_perplexity called with query='{query[:60]}', model='{model}', category='{category}'")
         if not self.api_key:
             print("PERPLEXITY_API_KEY not found in environment")
             return None
