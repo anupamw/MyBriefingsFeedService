@@ -1002,6 +1002,37 @@ async def root():
                 }
             }
             
+
+
+            function updateAllFeedAges() {
+                // For each feed-item, update the age label
+                const feedItems = document.querySelectorAll('.feed-item');
+                console.log(`Updating ages for ${feedItems.length} feed items`);
+                
+                feedItems.forEach((itemDiv, index) => {
+                    const publishedAt = itemDiv.getAttribute('data-published-at');
+                    const ageId = itemDiv.getAttribute('data-age-id');
+                    
+                    if (publishedAt && ageId) {
+                        const ageDiv = document.getElementById(ageId);
+                        if (ageDiv) {
+                            const publishedDate = new Date(publishedAt);
+                            const newAge = timeAgo(publishedDate);
+                            ageDiv.textContent = newAge;
+                            console.log(`Updated age for item ${index}: ${newAge}`);
+                        } else {
+                            console.log(`Age div not found for item ${index}, ageId: ${ageId}`);
+                        }
+                    } else {
+                        console.log(`Missing data for item ${index}: publishedAt=${publishedAt}, ageId=${ageId}`);
+                    }
+                });
+            }
+            
+            // Update feed ages every minute and also immediately when feed loads
+            setInterval(updateAllFeedAges, 60000);
+            
+            // Also update ages immediately when feed is displayed
             function displayFeed(items) {
                 const container = document.getElementById('feed-items');
                 container.innerHTML = '';
@@ -1079,25 +1110,10 @@ async def root():
                     }
                     container.appendChild(itemDiv);
                 });
-                updateAllFeedAges();
+                
+                // Update ages immediately after displaying feed
+                setTimeout(updateAllFeedAges, 100);
             }
-
-            function updateAllFeedAges() {
-                // For each feed-item, update the age label
-                document.querySelectorAll('.feed-item').forEach(itemDiv => {
-                    const publishedAt = itemDiv.getAttribute('data-published-at');
-                    const ageId = itemDiv.getAttribute('data-age-id');
-                    if (publishedAt && ageId) {
-                        const ageDiv = document.getElementById(ageId);
-                        if (ageDiv) {
-                            const publishedDate = new Date(publishedAt);
-                            ageDiv.textContent = timeAgo(publishedDate);
-                        }
-                    }
-                });
-            }
-            // Update feed ages every minute
-            setInterval(updateAllFeedAges, 60000);
 
             function filterByCategory(category) {
                 showFeed(0, category);
