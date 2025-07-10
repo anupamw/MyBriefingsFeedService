@@ -14,7 +14,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../'))
 from shared.database.connection import SessionLocal, init_database
 from shared.models.database_models import DataSource, FeedItem, IngestionJob, UserCategory, UserDB
 from celery_app import celery_app
-from runners.perplexity_runner import PerplexityRunner
+from runners.perplexity_runner import PerplexityRunner, router as perplexity_debug_router
 from runners.reddit_runner import RedditRunner
 from runners.social_runner import SocialRunner
 
@@ -113,14 +113,16 @@ def to_utc_z(dt):
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database on startup and trigger full ingestion for all users"""
+    """Initialize database on startup. (Ingestion on startup is now disabled.)"""
     init_database()
-    try:
-        from celery_app import celery_app
-        celery_app.send_task("runners.perplexity_runner.ingest_perplexity_for_all_users")
-        print("Triggered full Perplexity ingestion for all users on startup.")
-    except Exception as e:
-        print(f"Failed to trigger full ingestion on startup: {e}")
+    # The following code is commented out to prevent triggering a full ingestion for all users on every pod restart.
+    # This is no longer needed as periodic ingestion is handled by Celery Beat.
+    # try:
+    #     from celery_app import celery_app
+    #     celery_app.send_task("runners.perplexity_runner.ingest_perplexity_for_all_users")
+    #     print("Triggered full Perplexity ingestion for all users on startup.")
+    # except Exception as e:
+    #     print(f"Failed to trigger full ingestion on startup: {e}")
 
 @app.get("/ingestion/health")
 async def health_check():
@@ -752,6 +754,8 @@ async def get_category_status(user_id: int, db: SessionLocal = Depends(get_db)):
         "categories_without_items": len([c for c in category_status if not c["has_feed_items"]]),
         "category_status": category_status
     }
+
+app.include_router(perplexity_debug_router)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001) 

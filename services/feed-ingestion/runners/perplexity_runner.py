@@ -6,15 +6,52 @@ from typing import List, Dict, Any, Optional
 from celery import current_task
 from dotenv import load_dotenv
 from celery import group, chord
+from sqlalchemy import Column, Integer, String, DateTime, Text
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import Session
+from datetime import datetime
 
 # Import shared components
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../../'))
-from shared.database.connection import SessionLocal
+from shared.database.connection import SessionLocal, engine
 from shared.models.database_models import DataSource, FeedItem, IngestionJob, ContentCache, UserCategory, UserDB
 from celery_app import celery_app
 
 load_dotenv()
+
+# In-memory Perplexity call history for debugging
+# perplexity_call_history = []  # Each entry: {timestamp, category, prompt, response}
+PERPLEXITY_HISTORY_LIMIT = 100
+
+Base = declarative_base()
+
+class PerplexityCallHistory(Base):
+    __tablename__ = "perplexity_call_history"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    category = Column(String(140))
+    prompt = Column(Text)
+    response_word_count = Column(Integer)
+    http_status_code = Column(Integer)
+
+# Ensure table exists (run at import)
+Base.metadata.create_all(bind=engine)
+
+def add_perplexity_history_db(category, prompt, response_word_count, http_status_code):
+    db = SessionLocal()
+    try:
+        record = PerplexityCallHistory(
+            timestamp=datetime.utcnow(),
+            category=category,
+            prompt=prompt,
+            response_word_count=response_word_count,
+            http_status_code=http_status_code
+        )
+        db.add(record)
+        db.commit()
+    finally:
+        db.close()
 
 class PerplexityRunner:
     """Runner for Perplexity API integration"""
@@ -130,7 +167,7 @@ class PerplexityRunner:
         self.db.add(cache_entry)
         self.db.commit()
     
-    def query_perplexity(self, query: str, model: str = "sonar") -> Optional[Dict]:
+    def query_perplexity(self, query: str, model: str = "sonar", category: str = None) -> Optional[Dict]:
         """Query Perplexity API"""
         if not self.api_key:
             print("PERPLEXITY_API_KEY not found in environment")
@@ -172,9 +209,20 @@ class PerplexityRunner:
             # Cache the response
             self.cache_response(cache_key, result)
             
+            # Add to PG call history for debugging
+            word_count = 0
+            if isinstance(result, dict):
+                content = ""
+                if "choices" in result and result["choices"]:
+                    content = result["choices"][0]["message"]["content"]
+                word_count = len(content.split())
+            add_perplexity_history_db(category, query, word_count, response.status_code)
+            
             return result
             
         except requests.exceptions.RequestException as e:
+            # Log failed call as well
+            add_perplexity_history_db(category, query, 0, getattr(e.response, 'status_code', None) or 0)
             print(f"Error querying Perplexity API: {e}")
             return None
     
@@ -347,7 +395,7 @@ def ingest_perplexity(self, user_id: Optional[int] = None, queries: List[Dict[st
                 }
             )
             
-            response = runner.query_perplexity(query)
+            response = runner.query_perplexity(query, category=category_info.get("category_name"))
             if response:
                 content_items = runner.extract_content_from_response(response)
                 results = runner.save_feed_items(content_items, data_source, category_info)
@@ -445,3 +493,27 @@ if __name__ == "__main__":
     runner = PerplexityRunner()
     result = runner.query_perplexity("What are the top technology news stories today?")
     print(json.dumps(result, indent=2)) 
+
+# Add FastAPI debug endpoint if this file is run as main or imported in a FastAPI app
+try:
+    from fastapi import APIRouter
+    router = APIRouter()
+    @router.get("/debug/perplexity-history")
+    async def get_perplexity_history():
+        db = SessionLocal()
+        try:
+            records = db.query(PerplexityCallHistory).order_by(PerplexityCallHistory.timestamp.desc()).limit(100).all()
+            return [
+                {
+                    'timestamp': r.timestamp.isoformat() + 'Z',
+                    'category': r.category,
+                    'prompt': r.prompt,
+                    'response_word_count': r.response_word_count,
+                    'http_status_code': r.http_status_code
+                }
+                for r in records
+            ]
+        finally:
+            db.close()
+except ImportError:
+    pass 
