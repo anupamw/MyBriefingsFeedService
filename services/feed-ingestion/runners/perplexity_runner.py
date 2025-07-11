@@ -209,6 +209,7 @@ class PerplexityRunner:
             response.raise_for_status()
             
             result = response.json()
+            print(f"[DEBUG] Perplexity API response received: status_code={response.status_code}, response_keys={list(result.keys()) if isinstance(result, dict) else 'not_dict'}")
             
             # Cache the response
             self.cache_response(cache_key, result)
@@ -220,12 +221,14 @@ class PerplexityRunner:
                 if "choices" in result and result["choices"]:
                     content = result["choices"][0]["message"]["content"]
                 word_count = len(content.split())
+                print(f"[DEBUG] Perplexity response content (first 200 chars): {content[:200]}...")
             add_perplexity_history_db(category, query, word_count, response.status_code)
             
             return result
             
         except requests.exceptions.RequestException as e:
             # Log failed call as well
+            print(f"[DEBUG] Perplexity API request failed: {e}")
             add_perplexity_history_db(category, query, 0, getattr(e.response, 'status_code', None) or 0)
             print(f"Error querying Perplexity API: {e}")
             return None
