@@ -69,7 +69,12 @@ view_logs_by_time() {
     
     echo ""
     echo "Timeseries log created: $output_file"
-    echo "To view it: cat $output_file"
+    echo "=== DISPLAYING TIMESERIES LOG ==="
+    echo ""
+    cat "$output_file"
+    echo ""
+    echo "Log file saved to: $output_file"
+    echo "To view it again: cat $output_file"
     echo "To tail it: tail -f $output_file"
 }
 
