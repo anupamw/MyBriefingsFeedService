@@ -1399,6 +1399,52 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
         created_at=to_utc_z(datetime.fromisoformat(current_user["created_at"])) if current_user["created_at"] else None
     )
 
+@app.delete("/auth/user")
+async def delete_user_account(current_user: dict = Depends(get_current_user)):
+    """Delete the current user's account and all associated data"""
+    db = SessionLocal()
+    try:
+        user_id = current_user["id"]
+        
+        # Get user's categories
+        user_categories = db.query(UserCategoryDB).filter(
+            UserCategoryDB.user_id == user_id
+        ).all()
+        
+        category_names = [cat.category_name for cat in user_categories]
+        
+        # Delete feed items for user's categories
+        deleted_feed_count = 0
+        if category_names:
+            deleted_feed_count = db.query(FeedItemDB).filter(
+                FeedItemDB.category.in_(category_names)
+            ).delete()
+        
+        # Delete user's categories
+        deleted_categories_count = db.query(UserCategoryDB).filter(
+            UserCategoryDB.user_id == user_id
+        ).delete()
+        
+        # Delete the user account
+        user = db.query(UserDB).filter(UserDB.id == user_id).first()
+        if user:
+            db.delete(user)
+        
+        db.commit()
+        
+        return {
+            "message": "User account and all associated data deleted successfully",
+            "feed_items_deleted": deleted_feed_count,
+            "categories_deleted": deleted_categories_count,
+            "user_deleted": True
+        }
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting user account: {str(e)}")
+    finally:
+        db.close()
+
 @app.get("/feed", response_model=List[FeedItem])
 async def get_feed(limit: int = 10, offset: int = 0, category: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     """Get feed items with pagination (protected route)"""
