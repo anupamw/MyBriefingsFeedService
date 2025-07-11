@@ -193,7 +193,7 @@ class PerplexityRunner:
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are a helpful assistant that provides concise, informative summaries of current events and trending topics. Focus on factual information and provide relevant context."
+                    "content": "You are a helpful assistant that provides concise, informative summaries of current events and trending topics. Focus on factual information and provide relevant context. Please respond in JSON format with an array of news items. Each item should have: 'title' (brief headline), 'summary' (detailed description), and optionally 'url' (source link). Example format: {\"news_items\": [{\"title\": \"Headline\", \"summary\": \"Description\", \"url\": \"https://example.com\"}]}"
                 },
                 {
                     "role": "user",
@@ -234,41 +234,68 @@ class PerplexityRunner:
             return None
     
     def extract_content_from_response(self, response: Dict) -> List[Dict[str, Any]]:
-        """Extract structured content from Perplexity response"""
+        """Extract structured content from Perplexity response - parse JSON format"""
         content_items = []
         
         try:
             if "choices" in response and len(response["choices"]) > 0:
                 content = response["choices"][0]["message"]["content"]
                 
-                # Parse the content and extract structured information
-                # This is a simplified parser - you might want to make it more sophisticated
-                lines = content.split('\n')
-                current_item = {}
-                
-                for line in lines:
-                    line = line.strip()
-                    if not line:
-                        if current_item:
-                            content_items.append(current_item)
-                            current_item = {}
-                        continue
+                # Try to parse JSON response
+                try:
+                    import json
+                    parsed_content = json.loads(content)
                     
-                    # Simple parsing logic - adjust based on actual response format
-                    if line.startswith('**') and line.endswith('**'):
-                        if current_item:
-                            content_items.append(current_item)
-                        current_item = {"title": line.strip('*')}
-                    elif line.startswith('http'):
-                        current_item["url"] = line
-                    elif len(line) > 50:  # Likely content
-                        current_item["summary"] = line
-                
-                if current_item:
-                    content_items.append(current_item)
+                    # Extract news items from JSON
+                    if isinstance(parsed_content, dict) and "news_items" in parsed_content:
+                        news_items = parsed_content["news_items"]
+                        if isinstance(news_items, list):
+                            for item in news_items:
+                                if isinstance(item, dict):
+                                    content_items.append({
+                                        "title": item.get("title", "Untitled"),
+                                        "summary": item.get("summary", ""),
+                                        "url": item.get("url", ""),
+                                        "source": "Perplexity AI"
+                                    })
+                    elif isinstance(parsed_content, list):
+                        # Direct array of items
+                        for item in parsed_content:
+                            if isinstance(item, dict):
+                                content_items.append({
+                                    "title": item.get("title", "Untitled"),
+                                    "summary": item.get("summary", ""),
+                                    "url": item.get("url", ""),
+                                    "source": "Perplexity AI"
+                                })
+                    
+                    print(f"[DEBUG] Successfully parsed {len(content_items)} JSON news items")
+                    
+                except json.JSONDecodeError as e:
+                    print(f"[DEBUG] Failed to parse JSON response: {e}")
+                    print(f"[DEBUG] Raw content: {content[:200]}...")
+                    # Fallback to old parsing if JSON fails
+                    content_items = self._fallback_parse_content(content)
             
         except Exception as e:
             print(f"Error extracting content from response: {e}")
+        
+        return content_items
+    
+    def _fallback_parse_content(self, content: str) -> List[Dict[str, Any]]:
+        """Fallback parsing for non-JSON responses"""
+        content_items = []
+        lines = content.split('\n')
+        
+        for line in lines:
+            line = line.strip()
+            if line and len(line) > 20:  # Reasonable length for a news item
+                content_items.append({
+                    "title": line[:100] + "..." if len(line) > 100 else line,
+                    "summary": line,
+                    "url": "",
+                    "source": "Perplexity AI"
+                })
         
         return content_items
     
