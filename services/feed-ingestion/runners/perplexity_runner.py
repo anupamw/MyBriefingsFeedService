@@ -195,7 +195,7 @@ class PerplexityRunner:
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are a helpful assistant that provides concise, informative summaries of current events and trending topics. Focus on factual information and provide relevant context. Please respond in JSON format with an array of news items. Each item should have: 'title' (brief headline), 'summary' (detailed description), and optionally 'url' (source link). Example format: {\"news_items\": [{\"title\": \"Headline\", \"summary\": \"Description\", \"url\": \"https://example.com\"}]}"
+                    "content": "You are a helpful assistant that provides concise, informative summaries of current events and trending topics. Focus on factual information and provide relevant context. Respond in bullet points, but formatted as JSON with this exact structure: {\"news_items\": [{\"title\": \"Brief headline\", \"summary\": \"Detailed description\", \"url\": \"https://example.com\"}]}. Each news item should have a title (brief headline), summary (detailed description), and optionally a url (source link)."
                 },
                 {
                     "role": "user",
