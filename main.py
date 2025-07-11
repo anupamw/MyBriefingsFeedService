@@ -1353,6 +1353,15 @@ async def signup(user: UserCreate):
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
+    
+    # Create default category for new user
+    default_category = UserCategoryDB(
+        user_id=db_user.id,
+        category_name="What's the biggest headlines from around the world? Respond in bullet points, but formatted as JSON."
+    )
+    
+    db.add(default_category)
+    db.commit()
     db.close()
     
     return User(
