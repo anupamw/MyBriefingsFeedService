@@ -34,11 +34,12 @@ class PerplexityCallHistory(Base):
     prompt = Column(Text)
     response_word_count = Column(Integer)
     http_status_code = Column(Integer)
+    response_content = Column(Text)  # Store full response text
 
 # Ensure table exists (run at import)
 Base.metadata.create_all(bind=engine)
 
-def add_perplexity_history_db(category, prompt, response_word_count, http_status_code):
+def add_perplexity_history_db(category, prompt, response_word_count, http_status_code, response_content=""):
     print(f"[DEBUG] Attempting to log Perplexity call: category={category}, prompt={prompt[:60]}, response_word_count={response_word_count}, http_status_code={http_status_code}")
     db = SessionLocal()
     try:
@@ -47,7 +48,8 @@ def add_perplexity_history_db(category, prompt, response_word_count, http_status
             category=category,
             prompt=prompt,
             response_word_count=response_word_count,
-            http_status_code=http_status_code
+            http_status_code=http_status_code,
+            response_content=response_content
         )
         db.add(record)
         db.commit()
@@ -216,20 +218,27 @@ class PerplexityRunner:
             
             # Add to PG call history for debugging
             word_count = 0
+            response_content = ""
             if isinstance(result, dict):
                 content = ""
                 if "choices" in result and result["choices"]:
                     content = result["choices"][0]["message"]["content"]
                 word_count = len(content.split())
-                print(f"[DEBUG] Perplexity response content (first 200 chars): {content[:200]}...")
-            add_perplexity_history_db(category, query, word_count, response.status_code)
+                response_content = content
+            add_perplexity_history_db(category, query, word_count, response.status_code, response_content)
             
             return result
             
         except requests.exceptions.RequestException as e:
             # Log failed call as well
             print(f"[DEBUG] Perplexity API request failed: {e}")
-            add_perplexity_history_db(category, query, 0, getattr(e.response, 'status_code', None) or 0)
+            error_content = ""
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_content = e.response.text
+                except:
+                    error_content = str(e)
+            add_perplexity_history_db(category, query, 0, getattr(e.response, 'status_code', None) or 0, error_content)
             print(f"Error querying Perplexity API: {e}")
             return None
     
@@ -543,7 +552,8 @@ try:
                     'category': r.category,
                     'prompt': r.prompt,
                     'response_word_count': r.response_word_count,
-                    'http_status_code': r.http_status_code
+                    'http_status_code': r.http_status_code,
+                    'response_content': r.response_content
                 }
                 for r in records
             ]
