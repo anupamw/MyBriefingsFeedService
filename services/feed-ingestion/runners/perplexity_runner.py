@@ -99,27 +99,15 @@ class PerplexityRunner:
         queries = []
         
         for category in user_categories:
-            keywords = category.keywords or []
             category_name = category.category_name
-            
-            if keywords:
-                # Create query using category keywords
-                keyword_query = f"What are the latest news and developments about {', '.join(keywords)}?"
-                queries.append({
-                    "query": keyword_query,
-                    "category_id": category.id,
-                    "category_name": category_name,
-                    "user_id": category.user_id
-                })
-            else:
-                # Fallback to category name
-                fallback_query = f"What are the latest news and developments in {category_name}?"
-                queries.append({
-                    "query": fallback_query,
-                    "category_id": category.id,
-                    "category_name": category_name,
-                    "user_id": category.user_id
-                })
+            # Use the category name directly and append the JSON instruction
+            prompt = f"{category_name}. Respond in bullet points, but formatted as JSON."
+            queries.append({
+                "query": prompt,
+                "category_id": category.id,
+                "category_name": category_name,
+                "user_id": category.user_id
+            })
         
         return queries
     
