@@ -1416,6 +1416,24 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
         created_at=to_utc_z(datetime.fromisoformat(current_user["created_at"])) if current_user["created_at"] else None
     )
 
+@app.get("/auth/users", response_model=List[User])
+async def get_all_users(current_user: dict = Depends(get_current_user)):
+    """Get all users in the system (admin function)"""
+    db = SessionLocal()
+    try:
+        users = db.query(UserDB).order_by(UserDB.created_at.desc()).all()
+        result = []
+        for user in users:
+            result.append(User(
+                id=user.id,
+                username=user.username,
+                email=user.email,
+                created_at=to_utc_z(user.created_at)
+            ))
+        return result
+    finally:
+        db.close()
+
 @app.delete("/auth/user")
 async def delete_user_account(current_user: dict = Depends(get_current_user)):
     """Delete the current user's account and all associated data"""
