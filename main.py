@@ -783,8 +783,9 @@ async def root():
                     const data = await response.json();
                     
                     if (response.ok) {
-                        showSuccess('Account created successfully! Please sign in.');
-                        toggleForm('login');
+                        localStorage.setItem('token', data.access_token);
+                        showFeed();
+                        startPeriodicFeedRefresh();
                     } else {
                         showError(data.detail);
                     }
@@ -1362,6 +1363,22 @@ async def signup(user: UserCreate):
     
     db.add(default_category)
     db.commit()
+    
+    # Trigger ingestion for the new user with default category
+    try:
+        import requests
+        ingestion_response = requests.post(
+            "http://64.227.134.87:30101/ingest/perplexity",
+            params={"user_id": db_user.id},
+            timeout=5
+        )
+        if ingestion_response.status_code == 200:
+            print(f"Triggered ingestion for new user {db_user.id} with default category")
+        else:
+            print(f"Failed to trigger ingestion for new user {db_user.id}: {ingestion_response.status_code}")
+    except Exception as e:
+        print(f"Error triggering ingestion for new user {db_user.id}: {e}")
+    
     db.close()
     
     return User(
