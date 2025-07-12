@@ -1358,7 +1358,7 @@ async def signup(user: UserCreate):
     # Create default category for new user
     default_category = UserCategoryDB(
         user_id=db_user.id,
-        category_name="What's the biggest headlines from around the world? Respond in bullet points, but formatted as JSON."
+        category_name="What's the biggest headlines from around the world?"
     )
     
     db.add(default_category)
