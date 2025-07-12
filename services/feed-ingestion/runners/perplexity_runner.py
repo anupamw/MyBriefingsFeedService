@@ -237,11 +237,30 @@ class PerplexityRunner:
         try:
             if "choices" in response and len(response["choices"]) > 0:
                 content = response["choices"][0]["message"]["content"]
+                print(f"[DEBUG] Raw content from Perplexity: {content[:300]}...")
                 
                 # Try to parse JSON response
                 try:
                     import json
-                    parsed_content = json.loads(content)
+                    # Clean the content - remove any extra quotes or formatting
+                    cleaned_content = content.strip()
+                    
+                    # Handle markdown code blocks (```json ... ```)
+                    if cleaned_content.startswith('```json'):
+                        # Remove the opening ```json and closing ```
+                        cleaned_content = cleaned_content.replace('```json', '').replace('```', '').strip()
+                    elif cleaned_content.startswith('```'):
+                        # Remove any markdown code blocks
+                        cleaned_content = cleaned_content.replace('```', '').strip()
+                    
+                    # If content starts and ends with quotes, remove them
+                    if cleaned_content.startswith('"') and cleaned_content.endswith('"'):
+                        cleaned_content = cleaned_content[1:-1]
+                    # Unescape any escaped quotes
+                    cleaned_content = cleaned_content.replace('\\"', '"')
+                    
+                    parsed_content = json.loads(cleaned_content)
+                    print(f"[DEBUG] Successfully parsed JSON: {type(parsed_content)}")
                     
                     # Extract news items from JSON
                     if isinstance(parsed_content, dict) and "news_items" in parsed_content:
@@ -249,20 +268,46 @@ class PerplexityRunner:
                         if isinstance(news_items, list):
                             for item in news_items:
                                 if isinstance(item, dict):
+                                    # Clean the values to remove extra quotes
+                                    title = item.get("title", "Untitled")
+                                    summary = item.get("summary", "")
+                                    url = item.get("url", "")
+                                    
+                                    # Remove extra quotes if present
+                                    if isinstance(title, str) and title.startswith('"') and title.endswith('"'):
+                                        title = title[1:-1]
+                                    if isinstance(summary, str) and summary.startswith('"') and summary.endswith('"'):
+                                        summary = summary[1:-1]
+                                    if isinstance(url, str) and url.startswith('"') and url.endswith('"'):
+                                        url = url[1:-1]
+                                    
                                     content_items.append({
-                                        "title": item.get("title", "Untitled"),
-                                        "summary": item.get("summary", ""),
-                                        "url": item.get("url", ""),
+                                        "title": title,
+                                        "summary": summary,
+                                        "url": url,
                                         "source": "Perplexity AI"
                                     })
                     elif isinstance(parsed_content, list):
                         # Direct array of items
                         for item in parsed_content:
                             if isinstance(item, dict):
+                                # Clean the values to remove extra quotes
+                                title = item.get("title", "Untitled")
+                                summary = item.get("summary", "")
+                                url = item.get("url", "")
+                                
+                                # Remove extra quotes if present
+                                if isinstance(title, str) and title.startswith('"') and title.endswith('"'):
+                                    title = title[1:-1]
+                                if isinstance(summary, str) and summary.startswith('"') and summary.endswith('"'):
+                                    summary = summary[1:-1]
+                                if isinstance(url, str) and url.startswith('"') and url.endswith('"'):
+                                    url = url[1:-1]
+                                
                                 content_items.append({
-                                    "title": item.get("title", "Untitled"),
-                                    "summary": item.get("summary", ""),
-                                    "url": item.get("url", ""),
+                                    "title": title,
+                                    "summary": summary,
+                                    "url": url,
                                     "source": "Perplexity AI"
                                 })
                     
