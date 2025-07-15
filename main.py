@@ -898,6 +898,16 @@ async def root():
                 }
             }
             
+            function escapeForJsString(str) {
+                return str
+                    .replace(/\\/g, '\\\\')
+                    .replace(/'/g, "\\'")
+                    .replace(/"/g, '\\"')
+                    .replace(/`/g, '\\`')
+                    .replace(/\n/g, '\\n')
+                    .replace(/\r/g, '\\r');
+            }
+
             function displayCategories(categories) {
                 const container = document.getElementById('categories-list');
                 container.innerHTML = '';
@@ -912,8 +922,7 @@ async def root():
                     categoryDiv.className = 'category-item';
                     // Use short_summary for display if available, else fallback to category_name
                     const displayName = category.short_summary && category.short_summary.trim() ? category.short_summary : category.category_name;
-                    // Properly escape the display name for JavaScript
-                    const escapedDisplayName = displayName.replace(/'/g, "\\'").replace(/"/g, '\\"');
+                    const escapedDisplayName = escapeForJsString(displayName);
                     categoryDiv.innerHTML = `
                         <span class="category-name" style="cursor: pointer; color: #a8d5ba; text-decoration: underline;" onclick="filterByCategory('${escapedDisplayName}')">${displayName}</span>
                         <button class="delete-category" onclick="deleteCategory(${category.id})">×</button>
@@ -1093,13 +1102,13 @@ async def root():
                     if (feedText.length > 500) needsMore = true;
                     // Use short_summary for tag if available, else fallback to category
                     let tagName = item.short_summary && item.short_summary.trim() ? item.short_summary : (item.category || 'Uncategorized');
-                    tagName = tagName.replace(/'/g, "\\'").replace(/"/g, '\\"');
+                    const escapedTagName = escapeForJsString(tagName);
                     itemDiv.innerHTML = `
                         <div style="display: flex; flex-direction: column;">
                             <!-- Card Header -->
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
                                 <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span style="background: #a8d5ba; color: #2c3e50; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; cursor: pointer;" onclick="filterByCategory('${tagName}')">${tagName}</span>
+                                    <span style="background: #a8d5ba; color: #2c3e50; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; cursor: pointer;" onclick="filterByCategory('${escapedTagName}')">${tagName}</span>
                                     <span style="color: #666; font-size: 0.85em;">•</span>
                                     <span style="color: #666; font-size: 0.85em;">${item.source || 'Unknown'}</span>
                                 </div>
