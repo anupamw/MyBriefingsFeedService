@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Query
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import os
 from dotenv import load_dotenv
 import json
+import requests
 
 # Import shared components
 import sys
@@ -754,6 +755,80 @@ async def get_category_status(user_id: int, db: SessionLocal = Depends(get_db)):
         "categories_without_items": len([c for c in category_status if not c["has_feed_items"]]),
         "category_status": category_status
     }
+
+@app.post("/perplexity/derivatives")
+async def perplexity_derivatives(request: Request):
+    data = await request.json()
+    phrase = data.get("text")
+    if not phrase:
+        return {"error": "Missing text"}
+    # Build the explicit prompt with JSON key details
+    prompt = (
+        f'Consider the phrase "{phrase}". For this phrase, please respond ONLY in JSON to the following questions: '
+        '1. What is an up to 4 word summary of this phrase? The JSON key for this should be "summary" and the value should be a string. '
+        '2. What are the most popular subreddits that discuss the topic in this phrase? The JSON key for this should be "reddit" and the value should be a list of subreddit names as strings. '
+        '3. What are the most popular twitter handles and hashtags to learn about the topic in the phrase on twitter? The JSON key for this should be "twitter" and the value should be a list of strings, each string being either a handle (starting with @) or a hashtag (starting with #).'
+        ' Respond ONLY with a single JSON object with these three keys: "summary", "reddit", and "twitter".'
+    )
+    perplexity_api_key = os.getenv("PERPLEXITY_API_KEY")
+    if not perplexity_api_key:
+        return {"error": "PERPLEXITY_API_KEY not set in environment"}
+    headers = {
+        "Authorization": f"Bearer {perplexity_api_key}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "sonar",
+        "messages": [
+            {"role": "system", "content": "You are a helpful assistant that responds ONLY in JSON as instructed."},
+            {"role": "user", "content": prompt}
+        ],
+        "max_tokens": 256,
+        "temperature": 0.5
+    }
+    perplexity_url = "https://api.perplexity.ai/chat/completions"
+    try:
+        resp = requests.post(perplexity_url, headers=headers, json=payload, timeout=20)
+        print(f"[DEBUG] Perplexity API status: {resp.status_code}")
+        print(f"[DEBUG] Perplexity API response: {resp.text}")
+        if not resp.ok:
+            return {"error": f"Perplexity API error: {resp.status_code}", "raw": resp.text}
+        result = resp.json()
+        # Extract the content from the response
+        content = None
+        if "choices" in result and result["choices"]:
+            content = result["choices"][0]["message"]["content"]
+        if not content:
+            return {"error": "No content in Perplexity response", "raw": result}
+        # Try to parse the content as JSON
+        try:
+            # Clean up markdown code block if present
+            cleaned = content.strip()
+            if cleaned.startswith('```json'):
+                cleaned = cleaned.replace('```json', '').replace('```', '').strip()
+            elif cleaned.startswith('```'):
+                cleaned = cleaned.replace('```', '').strip()
+            # Remove leading/trailing quotes
+            if cleaned.startswith('"') and cleaned.endswith('"'):
+                cleaned = cleaned[1:-1]
+            cleaned = cleaned.replace('\\"', '"')
+            parsed = json.loads(cleaned)
+        except Exception as e:
+            return {"error": f"Failed to parse JSON from Perplexity response: {e}", "raw": content}
+        # Validate keys
+        if not all(k in parsed for k in ("summary", "reddit", "twitter")):
+            return {"error": "Missing one or more required keys in response", "raw": parsed}
+        # Validate types
+        if not isinstance(parsed["summary"], str):
+            return {"error": '"summary" must be a string', "raw": parsed}
+        if not isinstance(parsed["reddit"], list) or not all(isinstance(x, str) for x in parsed["reddit"]):
+            return {"error": '"reddit" must be a list of strings', "raw": parsed}
+        if not isinstance(parsed["twitter"], list) or not all(isinstance(x, str) for x in parsed["twitter"]):
+            return {"error": '"twitter" must be a list of strings', "raw": parsed}
+        return parsed
+    except Exception as e:
+        print(f"[ERROR] Exception calling Perplexity: {e}")
+        return {"error": f"Exception calling Perplexity: {e}"}
 
 app.include_router(perplexity_debug_router)
 
