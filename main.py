@@ -84,6 +84,7 @@ class UserCategoryDB(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, nullable=False)
     category_name = Column(String(140), nullable=False)  # Limited to 140 characters
+    short_summary = Column(String(50), nullable=True)  # Up to 4-word summary for display
     created_at = Column(DateTime, default=datetime.utcnow)
     
     __table_args__ = (
@@ -204,6 +205,7 @@ class UserCategory(BaseModel):
     id: int
     user_id: int
     category_name: str
+    short_summary: Optional[str] = None
     created_at: Optional[str] = None
 
 class UserCategoryCreate(BaseModel):
@@ -908,11 +910,12 @@ async def root():
                 categories.forEach(category => {
                     const categoryDiv = document.createElement('div');
                     categoryDiv.className = 'category-item';
-                    // Properly escape the category name for JavaScript
-                    const escapedCategoryName = category.category_name.replace(/'/g, "\\'").replace(/"/g, '\\"');
-                    console.log(`Category: "${category.category_name}" -> Escaped: "${escapedCategoryName}"`);
+                    // Use short_summary for display if available, else fallback to category_name
+                    const displayName = category.short_summary && category.short_summary.trim() ? category.short_summary : category.category_name;
+                    // Properly escape the display name for JavaScript
+                    const escapedDisplayName = displayName.replace(/'/g, "\\'").replace(/"/g, '\\"');
                     categoryDiv.innerHTML = `
-                        <span class="category-name" style="cursor: pointer; color: #a8d5ba; text-decoration: underline;" onclick="filterByCategory('${escapedCategoryName}')">${category.category_name}</span>
+                        <span class="category-name" style="cursor: pointer; color: #a8d5ba; text-decoration: underline;" onclick="filterByCategory('${escapedDisplayName}')">${displayName}</span>
                         <button class="delete-category" onclick="deleteCategory(${category.id})">×</button>
                     `;
                     container.appendChild(categoryDiv);
@@ -1080,7 +1083,7 @@ async def root():
                     // Combine summary and content for display
                     let feedText = '';
                     if (item.summary) feedText += item.summary;
-                    if (item.content) feedText += (feedText ? '\\n\\n' : '') + item.content;
+                    if (item.content) feedText += (feedText ? '\n\n' : '') + item.content;
                     // Card layout with expandable text
                     const textId = `feed-card-text-${idx}`;
                     const moreId = `feed-card-more-${idx}`;
@@ -1088,12 +1091,15 @@ async def root():
                     let needsMore = false;
                     // Estimate if text is longer than 5 lines (roughly > 500 chars or > 400px height)
                     if (feedText.length > 500) needsMore = true;
+                    // Use short_summary for tag if available, else fallback to category
+                    let tagName = item.short_summary && item.short_summary.trim() ? item.short_summary : (item.category || 'Uncategorized');
+                    tagName = tagName.replace(/'/g, "\\'").replace(/"/g, '\\"');
                     itemDiv.innerHTML = `
                         <div style="display: flex; flex-direction: column;">
                             <!-- Card Header -->
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
                                 <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span style="background: #a8d5ba; color: #2c3e50; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; cursor: pointer;" onclick="filterByCategory('${(item.category || 'Uncategorized').replace(/'/g, "\\'").replace(/"/g, '\\"')}')">${item.category || 'Uncategorized'}</span>
+                                    <span style="background: #a8d5ba; color: #2c3e50; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; cursor: pointer;" onclick="filterByCategory('${tagName}')">${tagName}</span>
                                     <span style="color: #666; font-size: 0.85em;">•</span>
                                     <span style="color: #666; font-size: 0.85em;">${item.source || 'Unknown'}</span>
                                 </div>
@@ -1104,7 +1110,7 @@ async def root():
                             </div>
                             <!-- Card Content -->
                             <div style="display: flex; flex-direction: column;">
-                                <div id="${textId}" class="feed-card-text">${feedText.replace(/\\n/g, '<br>')}</div>
+                                <div id="${textId}" class="feed-card-text">${feedText.replace(/\n/g, '<br>')}</div>
                                 ${needsMore ? `<span id="${moreId}" class="feed-card-more" onclick="toggleFeedCardText('${textId}', '${moreId}')">More</span>` : ''}
                             </div>
                             <!-- Card Footer -->
@@ -1499,11 +1505,15 @@ async def get_feed(limit: int = 10, offset: int = 0, category: Optional[str] = N
                 query = db.query(FeedItemDB).filter(FeedItemDB.category == "What is the happening in the world right now?")
         query = query.order_by(FeedItemDB.published_at.desc(), FeedItemDB.created_at.desc())
         items = query.offset(offset).limit(limit).all()
+        # Build a mapping from category_name to short_summary for this user
+        user_category_map = {cat.category_name: cat.short_summary for cat in db.query(UserCategoryDB).filter(UserCategoryDB.user_id == current_user["id"]).all()}
         result = []
         for item in items:
             # Ensure published_at and created_at are always UTC ISO strings with 'Z'
             published_at_str = to_utc_z(item.published_at)
             created_at_str = to_utc_z(item.created_at)
+            # Attach short_summary if available for this category
+            short_summary = user_category_map.get(item.category)
             result.append(FeedItem(
                 id=item.id,
                 summary=item.summary,
@@ -1512,7 +1522,8 @@ async def get_feed(limit: int = 10, offset: int = 0, category: Optional[str] = N
                 source=item.source,
                 published_at=published_at_str,
                 created_at=created_at_str,
-                category=item.category
+                category=item.category,
+                short_summary=short_summary
             ))
         return result
     finally:
@@ -1556,6 +1567,7 @@ async def get_user_categories(current_user: dict = Depends(get_current_user)):
             id=category.id,
             user_id=category.user_id,
             category_name=category.category_name,
+            short_summary=category.short_summary,
             created_at=to_utc_z(category.created_at)
         ))
     
@@ -1594,10 +1606,29 @@ async def create_user_category(
         db.close()
         raise HTTPException(status_code=400, detail="Category name must be 140 characters or less")
     
+    # Call Perplexity API to get a 4-word summary
+    import requests
+    short_summary = None
+    try:
+        perplexity_api_url = "http://64.227.134.87:30101/perplexity/short-summary"
+        resp = requests.post(perplexity_api_url, json={"text": category.category_name}, timeout=10)
+        if resp.ok:
+            data = resp.json()
+            # Expecting {"short_summary": "..."}
+            short_summary = data.get("short_summary")
+            if short_summary:
+                # Limit to 4 words, just in case
+                short_summary = " ".join(short_summary.split()[:4])
+        else:
+            short_summary = None
+    except Exception as e:
+        short_summary = None
+    
     # Create new category
     db_category = UserCategoryDB(
         user_id=current_user["id"],
-        category_name=category.category_name
+        category_name=category.category_name,
+        short_summary=short_summary
     )
     
     db.add(db_category)
@@ -1609,6 +1640,7 @@ async def create_user_category(
         id=db_category.id,
         user_id=db_category.user_id,
         category_name=db_category.category_name,
+        short_summary=db_category.short_summary,
         created_at=to_utc_z(db_category.created_at)
     )
 
