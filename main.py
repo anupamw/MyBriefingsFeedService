@@ -1611,7 +1611,8 @@ async def create_user_category(
     short_summary = None
     try:
         perplexity_api_url = "http://64.227.134.87:30101/perplexity/short-summary"
-        resp = requests.post(perplexity_api_url, json={"text": category.category_name}, timeout=10)
+        prompt = f'Can you give me a 4 word short summary to replace this longer phrase with: "{category.category_name}"?'
+        resp = requests.post(perplexity_api_url, json={"text": prompt}, timeout=10)
         if resp.ok:
             data = resp.json()
             # Expecting {"short_summary": "..."}
