@@ -898,6 +898,8 @@ async def root():
                 }
             }
             
+            // dummy comment
+            
             function escapeForJsString(str) {
                 return str
                     .replace(/\\/g, '\\\\')
