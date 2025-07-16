@@ -898,7 +898,7 @@ async def root():
                 }
             }
             
-            // dummy comment comment
+            // dummy comment comment comment
             
             function escapeForJsString(str) {
                 return str
