@@ -898,19 +898,7 @@ async def root():
                 }
             }
             
-            // dummy comment comment comment
-            
-
-
-            // function escapeForJsString(str) {
-            //     return str
-            //         .replace(/\\/g, '\\\\')
-            //         .replace(/'/g, "\\'")
-            //         .replace(/"/g, '\\"')
-            //         .replace(/`/g, '\\`')
-            //         .replace(/\n/g, '\\n')
-            //         .replace(/\r/g, '\\r');
-            // }
+        
 
             function displayCategories(categories) {
                 const container = document.getElementById('categories-list');
