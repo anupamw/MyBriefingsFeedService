@@ -1113,7 +1113,7 @@ async def root():
                             </div>
                             <!-- Card Content -->
                             <div style="display: flex; flex-direction: column;">
-                                <div id="${textId}" class="feed-card-text">${feedText.replace(/\n/g, '<br>')}</div>
+                                <div id="${textId}" class="feed-card-text">${feedText.replace(/\\n/g, '<br>')}</div>
                                 ${needsMore ? `<span id="${moreId}" class="feed-card-more" onclick="toggleFeedCardText('${textId}', '${moreId}')">More</span>` : ''}
                             </div>
                             <!-- Card Footer -->
