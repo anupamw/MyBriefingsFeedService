@@ -200,6 +200,7 @@ class FeedItem(BaseModel):
     published_at: Optional[str] = None
     created_at: Optional[str] = None
     category: Optional[str] = None
+    short_summary: Optional[str] = None
 
 class UserCategory(BaseModel):
     id: int
@@ -683,6 +684,25 @@ async def root():
         </div>
         
         <script>
+            // Escape HTML to prevent XSS
+            function escapeHtml(text) {
+                if (!text) return '';
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+            
+            // Escape JavaScript string for use in onclick attributes
+            function escapeJsString(str) {
+                if (!str) return '';
+                return str.replace(/\\/g, '\\\\')
+                         .replace(/'/g, "\\'")
+                         .replace(/"/g, '\\"')
+                         .replace(/\n/g, '\\n')
+                         .replace(/\r/g, '\\r')
+                         .replace(/\t/g, '\\t');
+            }
+            
             let feedRefreshInterval = null;
 
             function startPeriodicFeedRefresh() {
@@ -913,11 +933,11 @@ async def root():
                     const categoryDiv = document.createElement('div');
                     categoryDiv.className = 'category-item';
                     // Use short_summary for display if available, else fallback to category_name
-                    // const displayName = category.short_summary && category.short_summary.trim() ? category.short_summary : category.category_name;
-                    // const escapedDisplayName = escapeForJsString(displayName);
-                    const displayName = category.category_name;
+                    const displayName = category.short_summary && category.short_summary.trim() ? category.short_summary : category.category_name;
+                    const escapedDisplayName = escapeHtml(displayName);
+                    const escapedDisplayNameJs = escapeJsString(displayName);
                     categoryDiv.innerHTML = `
-                        <span class="category-name" style="cursor: pointer; color: #a8d5ba; text-decoration: underline;" onclick="filterByCategory('${displayName}')">${displayName}</span>
+                        <span class="category-name" style="cursor: pointer; color: #a8d5ba; text-decoration: underline;" onclick="filterByCategory('${escapedDisplayNameJs}')">${escapedDisplayName}</span>
                         <button class="delete-category" onclick="deleteCategory(${category.id})">×</button>
                     `;
                     container.appendChild(categoryDiv);
@@ -1056,8 +1076,9 @@ async def root():
                 if (currentCategoryFilter) {
                     const filterHeader = document.createElement('div');
                     filterHeader.style.cssText = 'background:#f8f9fa;padding:15px;border-radius:10px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;';
+                    const escapedCategoryFilter = escapeHtml(currentCategoryFilter);
                     filterHeader.innerHTML = `
-                        <span style="font-weight:600;color:#333;">Showing feeds from: <span style="color:#a8d5ba;">${currentCategoryFilter}</span></span>
+                        <span style="font-weight:600;color:#333;">Showing feeds from: <span style="color:#a8d5ba;">${escapedCategoryFilter}</span></span>
                         <button onclick="clearCategoryFilter()" style="background:#f8d7da;color:#721c24;border:none;border-radius:6px;padding:4px 8px;font-size:12px;font-weight:500;cursor:pointer;transition:all 0.2s;">Clear Filter</button>
                     `;
                     container.appendChild(filterHeader);
@@ -1094,38 +1115,49 @@ async def root():
                     // Estimate if text is longer than 5 lines (roughly > 500 chars or > 400px height)
                     if (feedText.length > 500) needsMore = true;
                     // Use short_summary for tag if available, else fallback to category
-                    // let tagName = item.short_summary && item.short_summary.trim() ? item.short_summary : (item.category || 'Uncategorized');
-                    // const escapedTagName = escapeForJsString(tagName);
-                    let tagName = item.category || 'Uncategorized';
+                    let tagName = item.short_summary && item.short_summary.trim() ? item.short_summary : (item.category || 'Uncategorized');
+                    
+                    // Escape all user data to prevent XSS
+                    const escapedTagName = escapeHtml(tagName);
+                    const escapedTagNameJs = escapeJsString(tagName);
+                    const escapedSource = escapeHtml(item.source || 'Unknown');
+                    const escapedAge = escapeHtml(age || 'Unknown time');
+                    const escapedPublished = escapeHtml(published);
+                    const escapedTextId = escapeHtml(textId);
+                    const escapedMoreId = escapeHtml(moreId);
+                    const escapedAgeId = escapeHtml(ageId);
+                    const escapedUrl = escapeHtml(item.url);
+                    const escapedFeedText = feedText.replace(/\\n/g, '<br>');
+                    
                     itemDiv.innerHTML = `
                         <div style="display: flex; flex-direction: column;">
                             <!-- Card Header -->
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
                                 <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span style="background: #a8d5ba; color: #2c3e50; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; cursor: pointer;" onclick="filterByCategory('${tagName}')">${tagName}</span>
+                                    <span style="background: #a8d5ba; color: #2c3e50; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; cursor: pointer;" onclick="filterByCategory('${escapedTagNameJs}')">${escapedTagName}</span>
                                     <span style="color: #666; font-size: 0.85em;">•</span>
-                                    <span style="color: #666; font-size: 0.85em;">${item.source || 'Unknown'}</span>
+                                    <span style="color: #666; font-size: 0.85em;">${escapedSource}</span>
                                 </div>
                                 <div style="text-align: right; font-size: 0.8em; color: #999;">
-                                    <div id="${ageId}">${age || 'Unknown time'}</div>
-                                    <div style="font-size: 0.95em; margin-top: 2px;">${published}</div>
+                                    <div id="${escapedAgeId}">${escapedAge}</div>
+                                    <div style="font-size: 0.95em; margin-top: 2px;">${escapedPublished}</div>
                                 </div>
                             </div>
                             <!-- Card Content -->
                             <div style="display: flex; flex-direction: column;">
-                                <div id="${textId}" class="feed-card-text">${feedText.replace(/\\n/g, '<br>')}</div>
-                                ${needsMore ? `<span id="${moreId}" class="feed-card-more" onclick="toggleFeedCardText('${textId}', '${moreId}')">More</span>` : ''}
+                                <div id="${escapedTextId}" class="feed-card-text">${escapedFeedText}</div>
+                                ${needsMore ? `<span id="${escapedMoreId}" class="feed-card-more" onclick="toggleFeedCardText('${escapedTextId}', '${escapedMoreId}')">More</span>` : ''}
                             </div>
                             <!-- Card Footer -->
                             ${item.url ? `<div style="display: flex; justify-content: flex-end; align-items: center; margin-top: 18px;">
-                                <a href="${item.url}" target="_blank" style="color: #a8d5ba; text-decoration: none; font-size: 0.85em; font-weight: 500;">Read More →</a>
+                                <a href="${escapedUrl}" target="_blank" style="color: #a8d5ba; text-decoration: none; font-size: 0.85em; font-weight: 500;">Read More →</a>
                             </div>` : ''}
                         </div>
                     `;
                     // Store published date as data attribute for updating age
                     if (publishedDate) {
                         itemDiv.setAttribute('data-published-at', publishedDate.toISOString());
-                        itemDiv.setAttribute('data-age-id', ageId);
+                        itemDiv.setAttribute('data-age-id', escapedAgeId);
                     }
                     container.appendChild(itemDiv);
                 });
@@ -1141,7 +1173,7 @@ async def root():
             function clearCategoryFilter() {
                 showFeed(0, null);
             }
-
+            
             function timeAgo(date) {
                 const now = new Date();
                 const seconds = Math.floor((now - date) / 1000);
@@ -1536,23 +1568,34 @@ async def get_feed(limit: int = 10, offset: int = 0, category: Optional[str] = N
 async def get_feed_item(item_id: int, current_user: dict = Depends(get_current_user)):
     """Get a specific feed item by ID (protected route)"""
     db = SessionLocal()
-    item = db.query(FeedItemDB).filter(FeedItemDB.id == item_id).first()
-    db.close()
-    if not item:
-        raise HTTPException(status_code=404, detail="Feed item not found")
-    # Ensure published_at and created_at are always UTC ISO strings with 'Z'
-    published_at_str = to_utc_z(item.published_at)
-    created_at_str = to_utc_z(item.created_at)
-    return FeedItem(
-        id=item.id,
-        summary=item.summary,
-        content=item.content,
-        url=item.url,
-        source=item.source,
-        published_at=published_at_str,
-        created_at=created_at_str,
-        category=item.category
-    )
+    try:
+        item = db.query(FeedItemDB).filter(FeedItemDB.id == item_id).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Feed item not found")
+        
+        # Build a mapping from category_name to short_summary for this user
+        user_category_map = {cat.category_name: cat.short_summary for cat in db.query(UserCategoryDB).filter(UserCategoryDB.user_id == current_user["id"]).all()}
+        
+        # Ensure published_at and created_at are always UTC ISO strings with 'Z'
+        published_at_str = to_utc_z(item.published_at)
+        created_at_str = to_utc_z(item.created_at)
+        
+        # Attach short_summary if available for this category
+        short_summary = user_category_map.get(item.category)
+        
+        return FeedItem(
+            id=item.id,
+            summary=item.summary,
+            content=item.content,
+            url=item.url,
+            source=item.source,
+            published_at=published_at_str,
+            created_at=created_at_str,
+            category=item.category,
+            short_summary=short_summary
+        )
+    finally:
+        db.close()
 
 # User Categories endpoints
 @app.get("/user/categories", response_model=List[UserCategory])
