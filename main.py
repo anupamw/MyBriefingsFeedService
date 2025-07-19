@@ -1609,26 +1609,32 @@ async def create_user_category(
         db.close()
         raise HTTPException(status_code=400, detail="Category name must be 140 characters or less")
     
-    # Call Perplexity API to get a 4-word summary
+    # Call Perplexity API to get derivatives (includes summary + additional metadata)
     import requests
     short_summary = None
     try:
-        perplexity_api_url = "http://64.227.134.87:30101/perplexity/short-summary"
-        prompt = f'Can you give me a 4 word short summary to replace this longer phrase with: "{category.category_name}"?'
-        resp = requests.post(perplexity_api_url, json={"text": prompt}, timeout=10)
-        print(f"[DEBUG] Perplexity API status: {resp.status_code}")
-        print(f"[DEBUG] Perplexity API response: {resp.text}")
+        perplexity_api_url = "http://64.227.134.87:30101/perplexity/derivatives"
+        prompt = (
+            f'Consider the phrase "{category.category_name}". For this phrase, please respond ONLY in JSON to the following questions: '
+            '1. What is an up to 4 word summary of this phrase? The JSON key for this should be "summary" and the value should be a string. '
+            '2. What are the most popular subreddits that discuss the topic in this phrase? The JSON key for this should be "reddit" and the value should be a list of subreddit names as strings. '
+            '3. What are the most popular twitter handles and hashtags to learn about the topic in the phrase on twitter? The JSON key for this should be "twitter" and the value should be a list of strings, each string being either a handle (starting with @) or a hashtag (starting with #).'
+            ' Respond ONLY with a single JSON object with these three keys: "summary", "reddit", and "twitter".'
+        )
+        resp = requests.post(perplexity_api_url, json={"text": prompt}, timeout=15)
+        print(f"[DEBUG] Perplexity Derivatives API status: {resp.status_code}")
+        print(f"[DEBUG] Perplexity Derivatives API response: {resp.text}")
         if resp.ok:
             data = resp.json()
-            # Expecting {"short_summary": "..."}
-            short_summary = data.get("short_summary")
+            # Extract summary from derivatives response
+            short_summary = data.get("summary")
             if short_summary:
                 # Limit to 4 words, just in case
                 short_summary = " ".join(short_summary.split()[:4])
         else:
             short_summary = None
     except Exception as e:
-        print(f"[ERROR] Exception calling Perplexity: {e}")
+        print(f"[ERROR] Exception calling Perplexity Derivatives: {e}")
         short_summary = None
     
     # Create new category
@@ -1835,37 +1841,7 @@ async def delete_feed_data_by_category(
     finally:
         db.close()
 
-@app.post("/category/derivatives")
-async def category_derivatives(request: Request):
-    data = await request.json()
-    phrase = data.get("text")
-    if not phrase:
-        return {"error": "Missing text"}
-    # Build the explicit prompt with JSON key details
-    prompt = (
-        f'Consider the phrase "{phrase}". For this phrase, please respond ONLY in JSON to the following questions: '
-        '1. What is an up to 4 word summary of this phrase? The JSON key for this should be "summary" and the value should be a string. '
-        '2. What are the most popular subreddits that discuss the topic in this phrase? The JSON key for this should be "reddit" and the value should be a list of subreddit names as strings. '
-        '3. What are the most popular twitter handles and hashtags to learn about the topic in the phrase on twitter? The JSON key for this should be "twitter" and the value should be a list of strings, each string being either a handle (starting with @) or a hashtag (starting with #).'
-        ' Respond ONLY with a single JSON object with these three keys: "summary", "reddit", and "twitter".'
-    )
-    # Call Perplexity API (update URL as needed)
-    perplexity_api_url = "http://64.227.134.87:30101/perplexity/derivatives"
-    import requests
-    try:
-        resp = requests.post(perplexity_api_url, json={"text": prompt}, timeout=15)
-        print(f"[DEBUG] Perplexity Derivatives API status: {resp.status_code}")
-        print(f"[DEBUG] Perplexity Derivatives API response: {resp.text}")
-        if resp.ok:
-            try:
-                return resp.json()
-            except Exception:
-                return {"error": "Failed to parse Perplexity response", "raw": resp.text}
-        else:
-            return {"error": f"Perplexity API error: {resp.status_code}", "raw": resp.text}
-    except Exception as e:
-        print(f"[ERROR] Exception calling Perplexity Derivatives: {e}")
-        return {"error": f"Exception calling Perplexity Derivatives: {e}"}
+
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
