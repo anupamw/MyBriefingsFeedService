@@ -692,16 +692,7 @@ async def root():
                 return div.innerHTML;
             }
             
-            // Escape JavaScript string for use in onclick attributes
-            function escapeJsString(str) {
-                if (!str) return '';
-                return str.replace(/\\/g, '\\\\')
-                         .replace(/'/g, "\\'")
-                         .replace(/"/g, '\\"')
-                         .replace(/\n/g, '\\n')
-                         .replace(/\r/g, '\\r')
-                         .replace(/\t/g, '\\t');
-            }
+
             
             let feedRefreshInterval = null;
 
