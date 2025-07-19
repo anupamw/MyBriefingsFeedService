@@ -1306,8 +1306,8 @@ async def root():
                         // Poll for task completion
                         await pollTaskCompletion(data.task_id);
                         
-                        // Reload the feed
-                        await loadFeed();
+                        // Reload the feed with current filter state
+                        await showFeed(currentOffset, currentCategoryFilter);
                         showSuccess('Briefings refreshed successfully!');
                     } else {
                         const data = await response.json();
