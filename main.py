@@ -935,13 +935,22 @@ async def root():
                     // Use short_summary for display if available, else fallback to category_name
                     const displayName = category.short_summary && category.short_summary.trim() ? category.short_summary : category.category_name;
                     const escapedDisplayName = escapeHtml(displayName);
-                    const escapedDisplayNameJs = escapeJsString(displayName);
                     categoryDiv.innerHTML = `
-                        <span class="category-name" style="cursor: pointer; color: #a8d5ba; text-decoration: underline;" onclick="filterByCategory('${escapedDisplayNameJs}')">${escapedDisplayName}</span>
+                        <span class="category-name" data-category="${escapedDisplayName}" style="cursor: pointer; color: #a8d5ba; text-decoration: underline;">${escapedDisplayName}</span>
                         <button class="delete-category" onclick="deleteCategory(${category.id})">×</button>
                     `;
                     container.appendChild(categoryDiv);
                 });
+                
+                // Add event listeners for category names
+                setTimeout(() => {
+                    document.querySelectorAll('.category-name').forEach(cat => {
+                        cat.addEventListener('click', function() {
+                            const category = this.getAttribute('data-category');
+                            filterByCategory(category);
+                        });
+                    });
+                }, 50);
             }
             
             async function addCategory() {
@@ -1079,7 +1088,7 @@ async def root():
                     const escapedCategoryFilter = escapeHtml(currentCategoryFilter);
                     filterHeader.innerHTML = `
                         <span style="font-weight:600;color:#333;">Showing feeds from: <span style="color:#a8d5ba;">${escapedCategoryFilter}</span></span>
-                        <button onclick="clearCategoryFilter()" style="background:#f8d7da;color:#721c24;border:none;border-radius:6px;padding:4px 8px;font-size:12px;font-weight:500;cursor:pointer;transition:all 0.2s;">Clear Filter</button>
+                        <button id="clear-filter-btn" style="background:#f8d7da;color:#721c24;border:none;border-radius:6px;padding:4px 8px;font-size:12px;font-weight:500;cursor:pointer;transition:all 0.2s;">Clear Filter</button>
                     `;
                     container.appendChild(filterHeader);
                 }
@@ -1119,7 +1128,6 @@ async def root():
                     
                     // Escape all user data to prevent XSS
                     const escapedTagName = escapeHtml(tagName);
-                    const escapedTagNameJs = escapeJsString(tagName);
                     const escapedSource = escapeHtml(item.source || 'Unknown');
                     const escapedAge = escapeHtml(age || 'Unknown time');
                     const escapedPublished = escapeHtml(published);
@@ -1134,7 +1142,7 @@ async def root():
                             <!-- Card Header -->
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
                                 <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span style="background: #a8d5ba; color: #2c3e50; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; cursor: pointer;" onclick="filterByCategory('${escapedTagNameJs}')">${escapedTagName}</span>
+                                    <span class="category-tag" data-category="${escapedTagName}" style="background: #a8d5ba; color: #2c3e50; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; cursor: pointer;">${escapedTagName}</span>
                                     <span style="color: #666; font-size: 0.85em;">•</span>
                                     <span style="color: #666; font-size: 0.85em;">${escapedSource}</span>
                                 </div>
@@ -1146,7 +1154,7 @@ async def root():
                             <!-- Card Content -->
                             <div style="display: flex; flex-direction: column;">
                                 <div id="${escapedTextId}" class="feed-card-text">${escapedFeedText}</div>
-                                ${needsMore ? `<span id="${escapedMoreId}" class="feed-card-more" onclick="toggleFeedCardText('${escapedTextId}', '${escapedMoreId}')">More</span>` : ''}
+                                ${needsMore ? `<span id="${escapedMoreId}" class="feed-card-more" data-text-id="${escapedTextId}" data-more-id="${escapedMoreId}">More</span>` : ''}
                             </div>
                             <!-- Card Footer -->
                             ${item.url ? `<div style="display: flex; justify-content: flex-end; align-items: center; margin-top: 18px;">
@@ -1164,6 +1172,32 @@ async def root():
                 
                 // Update ages immediately after displaying feed
                 setTimeout(updateAllFeedAges, 100);
+                
+                // Add event listeners for category tags and more buttons
+                setTimeout(() => {
+                    // Add event listeners for category tags
+                    document.querySelectorAll('.category-tag').forEach(tag => {
+                        tag.addEventListener('click', function() {
+                            const category = this.getAttribute('data-category');
+                            filterByCategory(category);
+                        });
+                    });
+                    
+                    // Add event listeners for more buttons
+                    document.querySelectorAll('.feed-card-more').forEach(btn => {
+                        btn.addEventListener('click', function() {
+                            const textId = this.getAttribute('data-text-id');
+                            const moreId = this.getAttribute('data-more-id');
+                            toggleFeedCardText(textId, moreId);
+                        });
+                    });
+                    
+                    // Add event listener for clear filter button
+                    const clearFilterBtn = document.getElementById('clear-filter-btn');
+                    if (clearFilterBtn) {
+                        clearFilterBtn.addEventListener('click', clearCategoryFilter);
+                    }
+                }, 50);
             }
 
             function filterByCategory(category) {
