@@ -1542,6 +1542,7 @@ async def get_feed(limit: int = 10, offset: int = 0, category: Optional[str] = N
         items = query.offset(offset).limit(limit).all()
         # Build a mapping from category_name to short_summary for this user
         user_category_map = {cat.category_name: cat.short_summary for cat in db.query(UserCategoryDB).filter(UserCategoryDB.user_id == current_user["id"]).all()}
+        print(f"[DEBUG] User category map: {user_category_map}")
         result = []
         for item in items:
             # Ensure published_at and created_at are always UTC ISO strings with 'Z'
@@ -1549,6 +1550,7 @@ async def get_feed(limit: int = 10, offset: int = 0, category: Optional[str] = N
             created_at_str = to_utc_z(item.created_at)
             # Attach short_summary if available for this category
             short_summary = user_category_map.get(item.category)
+            print(f"[DEBUG] Feed item category: '{item.category}' -> short_summary: '{short_summary}'")
             result.append(FeedItem(
                 id=item.id,
                 summary=item.summary,
