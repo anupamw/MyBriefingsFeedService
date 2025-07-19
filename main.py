@@ -1553,7 +1553,15 @@ async def get_feed(limit: int = 10, offset: int = 0, category: Optional[str] = N
     try:
         # If a category is specified, filter by it (existing behavior)
         if category:
-            query = db.query(FeedItemDB).filter(FeedItemDB.category == category)
+            # Create reverse mapping from short_summary to category_name for filtering
+            user_categories = db.query(UserCategoryDB).filter(UserCategoryDB.user_id == current_user["id"]).all()
+            short_summary_to_category = {cat.short_summary: cat.category_name for cat in user_categories if cat.short_summary}
+            
+            # If the category parameter is a short_summary, find the corresponding category_name
+            actual_category = short_summary_to_category.get(category, category)
+            print(f"[DEBUG] Filtering: received '{category}', using '{actual_category}'")
+            
+            query = db.query(FeedItemDB).filter(FeedItemDB.category == actual_category)
         else:
             # Check if user has any categories
             user_categories = db.query(UserCategoryDB).filter(UserCategoryDB.user_id == current_user["id"]).all()
