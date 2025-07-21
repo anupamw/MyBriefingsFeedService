@@ -85,6 +85,8 @@ class UserCategoryDB(Base):
     user_id = Column(Integer, nullable=False)
     category_name = Column(String(140), nullable=False)  # Limited to 140 characters
     short_summary = Column(String(50), nullable=True)  # Up to 4-word summary for display
+    subreddits = Column(Text, nullable=True)  # JSON string
+    twitter = Column(Text, nullable=True)     # JSON string
     created_at = Column(DateTime, default=datetime.utcnow)
     
     __table_args__ = (
@@ -207,6 +209,8 @@ class UserCategory(BaseModel):
     user_id: int
     category_name: str
     short_summary: Optional[str] = None
+    subreddits: Optional[str] = None
+    twitter: Optional[str] = None
     created_at: Optional[str] = None
 
 class UserCategoryCreate(BaseModel):
@@ -607,6 +611,46 @@ async def root():
                 font-weight: 500;
                 margin-bottom: 8px;
                 display: inline-block;
+            }
+            .reddit-card {
+                background: #fff;
+                border: 1.5px solid #ff4500;
+                border-radius: 16px;
+                padding: 22px 22px 16px 22px;
+                margin-bottom: 18px;
+                box-shadow: 0 2px 8px rgba(255,69,0,0.08);
+                transition: box-shadow 0.2s;
+            }
+            .reddit-card:hover {
+                box-shadow: 0 6px 24px rgba(255,69,0,0.13);
+                border-color: #ff6a1a;
+            }
+            .reddit-card .reddit-title {
+                font-size: 1.15em;
+                font-weight: 700;
+                color: #ff4500;
+                margin-bottom: 8px;
+            }
+            .reddit-card .reddit-top-comment {
+                color: #333;
+                font-size: 1em;
+                margin-bottom: 10px;
+            }
+            .reddit-card .reddit-meta {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                font-size: 0.95em;
+                color: #888;
+                margin-top: 8px;
+            }
+            .reddit-card a {
+                color: #ff4500;
+                text-decoration: none;
+                font-weight: 500;
+            }
+            .reddit-card a:hover {
+                text-decoration: underline;
             }
         </style>
     </head>
@@ -1106,57 +1150,58 @@ async def root():
                     // Combine summary and content for display
                     let feedText = '';
                     if (item.summary) feedText += item.summary;
-                    if (item.content) feedText += (feedText ? '\\n\\n' : '') + item.content;
+                    if (item.content) feedText += (feedText ? '\n\n' : '') + item.content;
                     // Card layout with expandable text
                     const textId = `feed-card-text-${idx}`;
                     const moreId = `feed-card-more-${idx}`;
                     const ageId = `feed-card-age-${idx}`;
                     let needsMore = false;
-                    // Estimate if text is longer than 5 lines (roughly > 500 chars or > 400px height)
                     if (feedText.length > 500) needsMore = true;
-                    // Use short_summary for tag if available, else fallback to category
-                    let tagName = item.short_summary && item.short_summary.trim() ? item.short_summary : (item.category || 'Uncategorized');
-                    
-                    // Escape all user data to prevent XSS
-                    const escapedTagName = escapeHtml(tagName);
-                    const escapedSource = escapeHtml(item.source || 'Unknown');
-                    const escapedAge = escapeHtml(age || 'Unknown time');
-                    const escapedPublished = escapeHtml(published);
-                    const escapedTextId = escapeHtml(textId);
-                    const escapedMoreId = escapeHtml(moreId);
-                    const escapedAgeId = escapeHtml(ageId);
-                    const escapedUrl = escapeHtml(item.url);
-                    const escapedFeedText = feedText.replace(/\\n/g, '<br>');
-                    
-                    itemDiv.innerHTML = `
-                        <div style="display: flex; flex-direction: column;">
-                            <!-- Card Header -->
-                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-                                <div style="display: flex; align-items: center; gap: 8px;">
-                                    <span class="category-tag" data-category="${escapedTagName}" style="background: #a8d5ba; color: #2c3e50; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; cursor: pointer;">${escapedTagName}</span>
-                                    <span style="color: #666; font-size: 0.85em;">•</span>
-                                    <span style="color: #666; font-size: 0.85em;">${escapedSource}</span>
-                                </div>
-                                <div style="text-align: right; font-size: 0.8em; color: #999;">
-                                    <div id="${escapedAgeId}">${escapedAge}</div>
-                                    <div style="font-size: 0.95em; margin-top: 2px;">${escapedPublished}</div>
+                    let tagName = item.category || 'Uncategorized';
+                    // Special Reddit card rendering
+                    if (item.source && item.source.startsWith('Reddit r/')) {
+                        itemDiv.innerHTML = `
+                            <div class="reddit-card">
+                                <div class="reddit-title">${escapeHtml(item.title)}</div>
+                                <div class="reddit-top-comment">${item.content ? `<span style='color:#888;font-size:0.95em;'>Top comment:</span> ${escapeHtml(item.content)}` : ''}</div>
+                                <div class="reddit-meta">
+                                    <span>${escapeHtml(item.source)}</span>
+                                    <a href="${escapeHtml(item.url)}" target="_blank">View on Reddit →</a>
                                 </div>
                             </div>
-                            <!-- Card Content -->
+                        `;
+                    } else {
+                        // Default card rendering
+                        itemDiv.innerHTML = `
                             <div style="display: flex; flex-direction: column;">
-                                <div id="${escapedTextId}" class="feed-card-text">${escapedFeedText}</div>
-                                ${needsMore ? `<span id="${escapedMoreId}" class="feed-card-more" data-text-id="${escapedTextId}" data-more-id="${escapedMoreId}">More</span>` : ''}
+                                <!-- Card Header -->
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span style="background: #a8d5ba; color: #2c3e50; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; cursor: pointer;" onclick="filterByCategory('${tagName}')">${tagName}</span>
+                                        <span style="color: #666; font-size: 0.85em;">•</span>
+                                        <span style="color: #666; font-size: 0.85em;">${item.source || 'Unknown'}</span>
+                                    </div>
+                                    <div style="text-align: right; font-size: 0.8em; color: #999;">
+                                        <div id="${ageId}">${age || 'Unknown time'}</div>
+                                        <div style="font-size: 0.95em; margin-top: 2px;">${published}</div>
+                                    </div>
+                                </div>
+                                <!-- Card Content -->
+                                <div style="display: flex; flex-direction: column;">
+                                    <div id="${textId}" class="feed-card-text">${feedText.replace(/\n/g, '<br>')}</div>
+                                    ${needsMore ? `<span id="${moreId}" class="feed-card-more" onclick="toggleFeedCardText('${textId}', '${moreId}')">More</span>` : ''}
+                                </div>
+                                <!-- Card Footer -->
+                                ${item.url ? `<div style="display: flex; justify-content: flex-end; align-items: center; margin-top: 18px;">
+                                    <a href="${item.url}" target="_blank" style="color: #a8d5ba; text-decoration: none; font-size: 0.85em; font-weight: 500;">Read More →</a>
+                                </div>` : ''}
                             </div>
-                            <!-- Card Footer -->
-                            ${item.url ? `<div style="display: flex; justify-content: flex-end; align-items: center; margin-top: 18px;">
-                                <a href="${escapedUrl}" target="_blank" style="color: #a8d5ba; text-decoration: none; font-size: 0.85em; font-weight: 500;">Read More →</a>
-                            </div>` : ''}
-                        </div>
-                    `;
+                        `;
+                    }
                     // Store published date as data attribute for updating age
                     if (publishedDate) {
                         itemDiv.setAttribute('data-published-at', publishedDate.toISOString());
-                        itemDiv.setAttribute('data-age-id', escapedAgeId);
+                        itemDiv.setAttribute('data-age-id', ageId);
                     }
                     container.appendChild(itemDiv);
                 });
@@ -1649,6 +1694,8 @@ async def get_user_categories(current_user: dict = Depends(get_current_user)):
             user_id=category.user_id,
             category_name=category.category_name,
             short_summary=category.short_summary,
+            subreddits=category.subreddits,
+            twitter=category.twitter,
             created_at=to_utc_z(category.created_at)
         ))
     
@@ -1689,7 +1736,10 @@ async def create_user_category(
     
     # Call Perplexity API to get derivatives (includes summary + additional metadata)
     import requests
+    import json
     short_summary = None
+    subreddits = None
+    twitter = None
     try:
         perplexity_api_url = "http://64.227.134.87:30101/perplexity/derivatives"
         prompt = (
@@ -1700,38 +1750,39 @@ async def create_user_category(
             ' Respond ONLY with a single JSON object with these three keys: "summary", "reddit", and "twitter".'
         )
         resp = requests.post(perplexity_api_url, json={"text": prompt}, timeout=15)
-        print(f"[DEBUG] Perplexity Derivatives API status: {resp.status_code}")
-        print(f"[DEBUG] Perplexity Derivatives API response: {resp.text}")
         if resp.ok:
             data = resp.json()
-            # Extract summary from derivatives response
             short_summary = data.get("summary")
             if short_summary:
-                # Limit to 4 words, just in case
                 short_summary = " ".join(short_summary.split()[:4])
+            subreddits = json.dumps(data.get("reddit", []))
+            twitter = json.dumps(data.get("twitter", []))
         else:
             short_summary = None
+            subreddits = None
+            twitter = None
     except Exception as e:
-        print(f"[ERROR] Exception calling Perplexity Derivatives: {e}")
         short_summary = None
-    
-    # Create new category
+        subreddits = None
+        twitter = None
     db_category = UserCategoryDB(
         user_id=current_user["id"],
         category_name=category.category_name,
-        short_summary=short_summary
+        short_summary=short_summary,
+        subreddits=subreddits,
+        twitter=twitter
     )
-    
     db.add(db_category)
     db.commit()
     db.refresh(db_category)
     db.close()
-    
     return UserCategory(
         id=db_category.id,
         user_id=db_category.user_id,
         category_name=db_category.category_name,
         short_summary=db_category.short_summary,
+        subreddits=db_category.subreddits,
+        twitter=db_category.twitter,
         created_at=to_utc_z(db_category.created_at)
     )
 
