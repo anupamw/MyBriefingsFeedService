@@ -22,7 +22,7 @@ import time
 load_dotenv()
 
 # Configuration
-INGESTION_SERVICE_URL = os.getenv("INGESTION_SERVICE_URL", "http://localhost:30101")
+INGESTION_SERVICE_URL = os.getenv("INGESTION_SERVICE_URL", "http://my-briefings-ingestion-service:8001")
 
 app = FastAPI(
     title="My Briefings Feed Service",
@@ -302,6 +302,9 @@ async def root():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+        <meta http-equiv="Pragma" content="no-cache">
+        <meta http-equiv="Expires" content="0">
         <title>My Briefings Feed Service</title>
         <style>
             * {
@@ -731,6 +734,7 @@ async def root():
         </div>
         
         <script>
+            // Version: 2025-07-22-01 - Force cache refresh
             // Escape HTML to prevent XSS
             function escapeHtml(text) {
                 if (!text) return '';
