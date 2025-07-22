@@ -1745,7 +1745,7 @@ async def create_user_category(
     subreddits = None
     twitter = None
     try:
-        perplexity_api_url = "/api/ingestion/perplexity/derivatives"
+        perplexity_api_url = f"{INGESTION_SERVICE_URL}/perplexity/derivatives"
         prompt = (
             f'Consider the phrase "{category.category_name}". For this phrase, please respond ONLY in JSON to the following questions: '
             '1. What is an up to 4 word summary of this phrase? The JSON key for this should be "summary" and the value should be a string. '
