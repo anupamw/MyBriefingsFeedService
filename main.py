@@ -1156,8 +1156,16 @@ async def root():
                     }
                     // Combine summary and content for display
                     let feedText = '';
-                    if (item.summary) feedText += item.summary;
-                    if (item.content) feedText += (feedText ? '\n\n' : '') + item.content;
+                    if (item.summary) {
+                        // Ensure summary is treated as plain text to avoid JS injection
+                        const safeSummary = String(item.summary).replace(/[<>]/g, '');
+                        feedText += safeSummary;
+                    }
+                    if (item.content) {
+                        // Ensure content is treated as plain text to avoid JS injection
+                        const safeContent = String(item.content).replace(/[<>]/g, '');
+                        feedText += (feedText ? '\n\n' : '') + safeContent;
+                    }
                     // Card layout with expandable text
                     const textId = `feed-card-text-${idx}`;
                     const moreId = `feed-card-more-${idx}`;
