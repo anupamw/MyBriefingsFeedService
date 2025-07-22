@@ -1192,7 +1192,7 @@ async def root():
                                 <!-- Card Header -->
                                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
                                     <div style="display: flex; align-items: center; gap: 8px;">
-                                        <span style="background: #a8d5ba; color: #2c3e50; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; cursor: pointer;" onclick="filterByCategory('${escapeHtml(tagName)}')">${escapeHtml(tagName)}</span>
+                                        <span style="background: #a8d5ba; color: #2c3e50; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; cursor: pointer;" data-category="${escapeHtml(tagName)}" class="category-tag">${escapeHtml(tagName)}</span>
                                         <span style="color: #666; font-size: 0.85em;">•</span>
                                         <span style="color: #666; font-size: 0.85em;">${escapeHtml(item.source || 'Unknown')}</span>
                                     </div>
@@ -1203,8 +1203,8 @@ async def root():
                                 </div>
                                 <!-- Card Content -->
                                 <div style="display: flex; flex-direction: column;">
-                                    <div id="${textId}" class="feed-card-text">${escapeHtml(feedText).replace(/\n/g, '<br>')}</div>
-                                    ${needsMore ? `<span id="${moreId}" class="feed-card-more" onclick="toggleFeedCardText('${textId}', '${moreId}')">More</span>` : ''}
+                                    <div id="${textId}" class="feed-card-text">${escapeHtml(feedText)}</div>
+                                    ${needsMore ? `<span id="${moreId}" class="feed-card-more" data-text-id="${textId}" data-more-id="${moreId}">More</span>` : ''}
                                 </div>
                                 <!-- Card Footer -->
                                 ${item.url ? `<div style="display: flex; justify-content: flex-end; align-items: center; margin-top: 18px;">
