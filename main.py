@@ -1798,6 +1798,21 @@ async def create_user_category(
     db.add(db_category)
     db.commit()
     db.refresh(db_category)
+    
+    # Trigger Reddit ingestion for this specific user
+    try:
+        print(f"[DEBUG] Triggering Reddit ingestion for user {current_user['id']} after category creation")
+        reddit_response = requests.post(
+            f"{INGESTION_SERVICE_URL}/ingest/reddit/user/{current_user['id']}",
+            timeout=5
+        )
+        if reddit_response.status_code == 200:
+            print(f"[DEBUG] Reddit ingestion for user {current_user['id']} triggered successfully")
+        else:
+            print(f"[ERROR] Failed to trigger Reddit ingestion for user {current_user['id']}: {reddit_response.status_code}")
+    except Exception as e:
+        print(f"[ERROR] Exception triggering Reddit ingestion for user {current_user['id']}: {e}")
+    
     db.close()
     return UserCategory(
         id=db_category.id,

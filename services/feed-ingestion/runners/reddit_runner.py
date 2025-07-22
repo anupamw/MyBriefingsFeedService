@@ -108,6 +108,30 @@ def ingest_reddit(self, subreddits: list = None, time_filter: str = "day"):
     return {"status": "completed", "created": total_created, "subreddits_processed": len(subreddits)}
 
 @celery_app.task(bind=True)
+def ingest_reddit_for_user(self, user_id: int):
+    """Trigger Reddit ingestion for a specific user based on their categories"""
+    from shared.models.database_models import UserCategory
+    import json
+    db = SessionLocal()
+    user_categories = db.query(UserCategory).filter(UserCategory.user_id == user_id).all()
+    subreddits = []
+    for cat in user_categories:
+        if cat.subreddits:
+            try:
+                subreddits.extend(json.loads(cat.subreddits))
+            except Exception:
+                continue
+    if subreddits:
+        # Remove 'r/' prefix if present and deduplicate
+        clean_subreddits = list(set([sub.replace('r/', '') for sub in subreddits]))
+        ingest_reddit.apply_async(args=[clean_subreddits])
+        db.close()
+        return {"status": "scheduled", "user_id": user_id, "subreddits": clean_subreddits}
+    else:
+        db.close()
+        return {"status": "no_subreddits", "user_id": user_id}
+
+@celery_app.task(bind=True)
 def ingest_reddit_for_all_users(self):
     from shared.models.database_models import UserCategory, UserDB
     import json

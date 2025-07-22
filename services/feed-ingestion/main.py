@@ -292,6 +292,41 @@ async def trigger_reddit_ingestion(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to start ingestion job: {str(e)}")
 
+@app.post("/ingest/reddit/user/{user_id}")
+async def trigger_reddit_ingestion_for_user(user_id: int):
+    """Trigger Reddit ingestion for a specific user based on their categories"""
+    try:
+        # Submit Celery task
+        task = celery_app.send_task(
+            "runners.reddit_runner.ingest_reddit_for_user",
+            args=[user_id]
+        )
+        
+        return {
+            "message": f"Reddit ingestion for user {user_id} started",
+            "task_id": task.id,
+            "status": "pending"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start Reddit ingestion for user: {str(e)}")
+
+@app.post("/ingest/reddit/all-users")
+async def trigger_reddit_ingestion_all_users():
+    """Trigger Reddit ingestion for all users based on their categories"""
+    try:
+        # Submit Celery task
+        task = celery_app.send_task(
+            "runners.reddit_runner.ingest_reddit_for_all_users"
+        )
+        
+        return {
+            "message": "Reddit ingestion for all users started",
+            "task_id": task.id,
+            "status": "pending"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start Reddit ingestion for all users: {str(e)}")
+
 @app.post("/ingest/social")
 async def trigger_social_ingestion(sources: Optional[List[str]] = None):
     """Trigger social media ingestion job"""
