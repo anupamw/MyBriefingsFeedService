@@ -21,6 +21,9 @@ import time
 # Load environment variables from .env file
 load_dotenv()
 
+# Configuration
+INGESTION_SERVICE_URL = os.getenv("INGESTION_SERVICE_URL", "http://localhost:30101")
+
 app = FastAPI(
     title="My Briefings Feed Service",
     description="A FastAPI service for serving personalized news feeds",
@@ -1035,7 +1038,7 @@ async def root():
                     const userData = await userResp.json();
                     
                     // Call the ingestion endpoint with correct format
-                    const resp = await fetch(`http://64.227.134.87:30101/ingest/perplexity?user_id=${userData.id}`, {
+                    const resp = await fetch(`/api/ingestion/ingest/perplexity?user_id=${userData.id}`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
@@ -1337,7 +1340,7 @@ async def root():
                 
                 try {
                     // Trigger the ingestion
-                    const response = await fetch('/ingestion/ingest/perplexity', {
+                    const response = await fetch('/api/ingestion/ingest/perplexity', {
                         method: 'POST',
                         headers: {
                             'Authorization': `Bearer ${token}`
@@ -1373,7 +1376,7 @@ async def root():
                 
                 while (attempts < maxAttempts) {
                     try {
-                        const response = await fetch(`/ingestion/task/${taskId}`, {
+                        const response = await fetch(`/api/ingestion/task/${taskId}`, {
                             headers: {
                                 'Authorization': `Bearer ${localStorage.getItem('token')}`
                             }
@@ -1478,8 +1481,9 @@ async def signup(user: UserCreate):
     # Trigger ingestion for the new user with default category
     try:
         import requests
+        # Call ingestion service directly since this is server-side code
         ingestion_response = requests.post(
-            "http://64.227.134.87:30101/ingest/perplexity",
+            f"{INGESTION_SERVICE_URL}/ingest/perplexity",
             params={"user_id": db_user.id},
             timeout=5
         )
@@ -1741,7 +1745,7 @@ async def create_user_category(
     subreddits = None
     twitter = None
     try:
-        perplexity_api_url = "http://64.227.134.87:30101/perplexity/derivatives"
+        perplexity_api_url = "/api/ingestion/perplexity/derivatives"
         prompt = (
             f'Consider the phrase "{category.category_name}". For this phrase, please respond ONLY in JSON to the following questions: '
             '1. What is an up to 4 word summary of this phrase? The JSON key for this should be "summary" and the value should be a string. '
@@ -1749,19 +1753,26 @@ async def create_user_category(
             '3. What are the most popular twitter handles and hashtags to learn about the topic in the phrase on twitter? The JSON key for this should be "twitter" and the value should be a list of strings, each string being either a handle (starting with @) or a hashtag (starting with #).'
             ' Respond ONLY with a single JSON object with these three keys: "summary", "reddit", and "twitter".'
         )
-        resp = requests.post(perplexity_api_url, json={"text": prompt}, timeout=15)
+        print(f"[DEBUG] Calling derivatives API with category: {category.category_name}")
+        resp = requests.post(perplexity_api_url, json={"text": category.category_name}, timeout=15)
+        print(f"[DEBUG] Derivatives API response status: {resp.status_code}")
+        print(f"[DEBUG] Derivatives API response text: {resp.text[:500]}")
         if resp.ok:
             data = resp.json()
+            print(f"[DEBUG] Derivatives API parsed data: {data}")
             short_summary = data.get("summary")
             if short_summary:
                 short_summary = " ".join(short_summary.split()[:4])
             subreddits = json.dumps(data.get("reddit", []))
             twitter = json.dumps(data.get("twitter", []))
+            print(f"[DEBUG] Extracted derivatives - summary: {short_summary}, subreddits: {subreddits}, twitter: {twitter}")
         else:
+            print(f"[ERROR] Derivatives API failed with status {resp.status_code}: {resp.text}")
             short_summary = None
             subreddits = None
             twitter = None
     except Exception as e:
+        print(f"[ERROR] Exception in derivatives API call: {e}")
         short_summary = None
         subreddits = None
         twitter = None
@@ -1971,6 +1982,68 @@ async def delete_feed_data_by_category(
         db.close()
 
 
+
+# Proxy endpoints to ingestion service
+@app.post("/api/ingestion/perplexity/derivatives")
+async def proxy_perplexity_derivatives(request: Request):
+    """Proxy endpoint to forward derivatives requests to ingestion service"""
+    try:
+        # Get the request body
+        body = await request.json()
+        print(f"[DEBUG] Proxy derivatives called with body: {body}")
+        
+        # Forward to ingestion service
+        import requests
+        ingestion_url = f"{INGESTION_SERVICE_URL}/perplexity/derivatives"
+        print(f"[DEBUG] Forwarding to: {ingestion_url}")
+        response = requests.post(ingestion_url, json=body, timeout=15)
+        print(f"[DEBUG] Proxy derivatives response status: {response.status_code}")
+        
+        return response.json()
+    except Exception as e:
+        print(f"[ERROR] Proxy derivatives error: {e}")
+        raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
+
+@app.post("/api/ingestion/ingest/perplexity")
+async def proxy_ingest_perplexity(request: Request):
+    """Proxy endpoint to forward ingestion requests to ingestion service"""
+    try:
+        # Get query parameters
+        user_id = request.query_params.get("user_id")
+        print(f"[DEBUG] Proxy ingestion called with user_id: {user_id}")
+        
+        # Forward to ingestion service
+        import requests
+        ingestion_url = f"{INGESTION_SERVICE_URL}/ingest/perplexity"
+        if user_id:
+            ingestion_url += f"?user_id={user_id}"
+        print(f"[DEBUG] Forwarding to: {ingestion_url}")
+        
+        response = requests.post(ingestion_url, timeout=15)
+        print(f"[DEBUG] Proxy ingestion response status: {response.status_code}")
+        
+        return response.json()
+    except Exception as e:
+        print(f"[ERROR] Proxy ingestion error: {e}")
+        raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
+
+@app.get("/api/ingestion/task/{task_id}")
+async def proxy_task_status(task_id: str):
+    """Proxy endpoint to forward task status requests to ingestion service"""
+    try:
+        print(f"[DEBUG] Proxy task status called with task_id: {task_id}")
+        
+        # Forward to ingestion service
+        import requests
+        ingestion_url = f"{INGESTION_SERVICE_URL}/task/{task_id}"
+        print(f"[DEBUG] Forwarding to: {ingestion_url}")
+        response = requests.get(ingestion_url, timeout=15)
+        print(f"[DEBUG] Proxy task status response status: {response.status_code}")
+        
+        return response.json()
+    except Exception as e:
+        print(f"[ERROR] Proxy task status error: {e}")
+        raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
