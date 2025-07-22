@@ -87,12 +87,17 @@ class RedditRunner:
         return {"created": created}
 
 @celery_app.task(bind=True)
-def ingest_reddit(self, subreddits: list, time_filter: str = "day"):
+def ingest_reddit(self, subreddits: list = None, time_filter: str = "day"):
     runner = RedditRunner()
     data_source = runner.db.query(DataSource).filter(DataSource.name == "reddit").first()
     if not data_source:
         print("Reddit data source not found or inactive")
         return {"error": "Data source not found"}
+    
+    # Handle None subreddits
+    if subreddits is None:
+        subreddits = []
+    
     total_created = 0
     for subreddit in subreddits:
         posts = runner.get_subreddit_posts_with_comments(subreddit, limit=3, time_filter=time_filter)
