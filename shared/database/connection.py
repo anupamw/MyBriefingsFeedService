@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from dotenv import load_dotenv
@@ -52,8 +52,45 @@ def init_database():
     # Create all tables
     Base.metadata.create_all(bind=engine)
     
+    # Run database migration to update existing tables
+    migrate_database_schema()
+    
     # Initialize default data sources
     init_default_data_sources(DataSource)
+
+def migrate_database_schema():
+    """Migrate database schema to support longer titles and URLs"""
+    try:
+        # Check if we're using PostgreSQL
+        if DATABASE_URL.startswith("postgresql"):
+            print("Migrating PostgreSQL database schema...")
+            
+            with engine.connect() as conn:
+                # Update title column to VARCHAR(500) if it's currently smaller
+                conn.execute(text("""
+                    ALTER TABLE feed_items 
+                    ALTER COLUMN title TYPE VARCHAR(500)
+                """))
+                
+                # Update url column to VARCHAR(1000) if it's currently smaller
+                conn.execute(text("""
+                    ALTER TABLE feed_items 
+                    ALTER COLUMN url TYPE VARCHAR(1000)
+                """))
+                
+                conn.commit()
+                print("Successfully updated feed_items table schema")
+                
+        else:
+            print("SQLite database detected - no migration needed (SQLite is flexible with field lengths)")
+            
+    except Exception as e:
+        print(f"Migration error (this may be expected if columns already have correct types): {e}")
+        # Check if columns already have the right type
+        if "already exists" in str(e) or "does not exist" in str(e) or "type" in str(e).lower():
+            print("Migration may have already been applied or is not needed")
+        else:
+            print(f"Unexpected migration error: {e}")
 
 def init_default_data_sources(DataSource):
     """Initialize default data sources"""

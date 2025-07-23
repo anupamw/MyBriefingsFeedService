@@ -119,8 +119,13 @@ class RedditRunner:
         created = 0
         for post in posts:
             try:
+                # Truncate title to fit database field
+                title = post.get("title", "Untitled")
+                if len(title) > 500:
+                    title = title[:497] + "..."
+                
                 feed_item = FeedItem(
-                    title=post.get("title", "Untitled"),
+                    title=title,
                     summary=post.get("summary", ""),
                     content=post['top_comment']['text'] if post.get('top_comment') else "",
                     url=post.get("url", ""),

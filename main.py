@@ -72,10 +72,10 @@ class FeedItemDB(Base):
     __tablename__ = "feed_items"
     
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String(200), nullable=False)
+    title = Column(String(500), nullable=False)
     summary = Column(Text)
     content = Column(Text)
-    url = Column(String(500))
+    url = Column(String(1000))
     source = Column(String(100))
     published_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
