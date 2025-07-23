@@ -20,7 +20,7 @@ load_dotenv()
 class RedditRunner:
     """Runner for Reddit API integration"""
     def __init__(self):
-        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        self.user_agent = "python:MyBriefingsFeedService:v1.0"
         self.base_url = "https://www.reddit.com"
         self.db = SessionLocal()
 
