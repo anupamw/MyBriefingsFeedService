@@ -132,18 +132,23 @@ class RedditRunner:
                     category=post.get('subreddit', 'Reddit'),
                     tags=["reddit", post.get("subreddit", "").lower()]
                 )
+                print(f"[DEBUG] Saving Reddit post: '{feed_item.title}' with category '{feed_item.category}'")
                 self.db.add(feed_item)
                 created += 1
             except Exception as e:
                 print(f"Error saving Reddit post: {e}")
                 continue
         self.db.commit()
+        print(f"[DEBUG] Successfully saved {created} Reddit posts to database")
         return {"created": created}
 
 @celery_app.task(bind=True)
 def ingest_reddit(self, subreddits: list = None, time_filter: str = "day"):
     runner = RedditRunner()
     data_source = runner.db.query(DataSource).filter(DataSource.name == "reddit").first()
+    print(f"[DEBUG] Reddit data source found: {data_source is not None}")
+    if data_source:
+        print(f"[DEBUG] Data source ID: {data_source.id}, Name: {data_source.name}, Active: {data_source.is_active}")
     if not data_source:
         print("Reddit data source not found or inactive")
         return {"error": "Data source not found"}
