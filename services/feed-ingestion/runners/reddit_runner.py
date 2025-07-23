@@ -2,6 +2,7 @@ import os
 import requests
 import json
 import time
+import feedparser
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from celery import current_task
@@ -39,41 +40,80 @@ class RedditRunner:
         return None
 
     def get_subreddit_posts_with_comments(self, subreddit, limit=3, time_filter='day'):
-        url = f'{self.base_url}/r/{subreddit}/top.json?limit={limit}&t={time_filter}'
+        # Try RSS feed first (more reliable than JSON API)
+        rss_url = f'{self.base_url}/r/{subreddit}/.rss'
         headers = {
             'User-Agent': self.user_agent,
-            'Accept': 'application/json, text/plain, */*',
+            'Accept': 'application/rss+xml, application/xml, text/xml, */*',
             'Accept-Language': 'en-US,en;q=0.9',
             'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1'
+            'Connection': 'keep-alive'
         }
-        print(f"[DEBUG] Fetching Reddit posts from: {url}")
-        resp = requests.get(url, headers=headers)
-        print(f"[DEBUG] Reddit API response status: {resp.status_code}")
-        if resp.status_code != 200:
-            print(f"[DEBUG] Reddit API error: {resp.text[:200]}")
-            return []
-        data = resp.json()
-        posts = []
-        if 'data' in data and 'children' in data['data']:
-            print(f"[DEBUG] Found {len(data['data']['children'])} posts in response")
-            for post in data['data']['children']:
-                post_data = post['data']
-                post_id = post_data['id']
-                top_comment = self.get_top_comment(subreddit, post_id)
+        print(f"[DEBUG] Fetching Reddit RSS from: {rss_url}")
+        resp = requests.get(rss_url, headers=headers)
+        print(f"[DEBUG] Reddit RSS response status: {resp.status_code}")
+        
+        if resp.status_code == 200:
+            # Parse RSS feed
+            import feedparser
+            feed = feedparser.parse(resp.text)
+            posts = []
+            print(f"[DEBUG] Found {len(feed.entries)} entries in RSS feed")
+            
+            for entry in feed.entries[:limit]:
+                # Extract publication date
+                published = datetime.utcnow()
+                if hasattr(entry, 'published_parsed') and entry.published_parsed:
+                    published = datetime(*entry.published_parsed[:6])
+                
                 posts.append({
-                    'title': post_data.get('title', ''),
-                    'summary': post_data.get('selftext', ''),
-                    'score': post_data.get('score', 0),
-                    'url': f"https://reddit.com{post_data.get('permalink', '')}",
+                    'title': entry.get('title', ''),
+                    'summary': entry.get('summary', ''),
+                    'score': 0,  # RSS doesn't provide scores
+                    'url': entry.get('link', ''),
                     'subreddit': subreddit,
-                    'created_utc': post_data.get('created_utc', 0),
-                    'top_comment': top_comment
+                    'created_utc': published.timestamp(),
+                    'top_comment': None  # RSS doesn't provide comments
                 })
+            return posts
         else:
-            print(f"[DEBUG] No posts found in Reddit response")
-        return posts
+            print(f"[DEBUG] RSS failed, trying JSON API as fallback")
+            # Fallback to JSON API
+            url = f'{self.base_url}/r/{subreddit}/top.json?limit={limit}&t={time_filter}'
+            headers = {
+                'User-Agent': self.user_agent,
+                'Accept': 'application/json, text/plain, */*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
+            }
+            print(f"[DEBUG] Fetching Reddit posts from: {url}")
+            resp = requests.get(url, headers=headers)
+            print(f"[DEBUG] Reddit API response status: {resp.status_code}")
+            if resp.status_code != 200:
+                print(f"[DEBUG] Reddit API error: {resp.text[:200]}")
+                return []
+            data = resp.json()
+            posts = []
+            if 'data' in data and 'children' in data['data']:
+                print(f"[DEBUG] Found {len(data['data']['children'])} posts in response")
+                for post in data['data']['children']:
+                    post_data = post['data']
+                    post_id = post_data['id']
+                    top_comment = self.get_top_comment(subreddit, post_id)
+                    posts.append({
+                        'title': post_data.get('title', ''),
+                        'summary': post_data.get('selftext', ''),
+                        'score': post_data.get('score', 0),
+                        'url': f"https://reddit.com{post_data.get('permalink', '')}",
+                        'subreddit': subreddit,
+                        'created_utc': post_data.get('created_utc', 0),
+                        'top_comment': top_comment
+                    })
+            else:
+                print(f"[DEBUG] No posts found in Reddit response")
+            return posts
 
     def save_feed_items_with_comments(self, posts: list, data_source):
         created = 0
