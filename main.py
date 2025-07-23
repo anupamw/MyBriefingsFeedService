@@ -2074,6 +2074,24 @@ async def proxy_task_status(task_id: str):
         print(f"[ERROR] Proxy task status error: {e}")
         raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
 
+@app.get("/api/ingestion/debug/user-feed/{user_id}")
+async def proxy_debug_user_feed(user_id: int):
+    """Proxy endpoint to forward debug user feed requests to ingestion service"""
+    try:
+        print(f"[DEBUG] Proxy debug user feed called with user_id: {user_id}")
+        
+        # Forward to ingestion service
+        import requests
+        ingestion_url = f"{INGESTION_SERVICE_URL}/debug/user-feed/{user_id}"
+        print(f"[DEBUG] Forwarding to: {ingestion_url}")
+        response = requests.get(ingestion_url, timeout=15)
+        print(f"[DEBUG] Proxy debug user feed response status: {response.status_code}")
+        
+        return response.json()
+    except Exception as e:
+        print(f"[ERROR] Proxy debug user feed error: {e}")
+        raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 if __name__ == "__main__":

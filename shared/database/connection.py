@@ -77,16 +77,16 @@ def init_default_data_sources(DataSource):
                 }
             },
             # Disabled data sources - uncomment to enable
-            # {
-            #     "name": "reddit",
-            #     "display_name": "Reddit",
-            #     "base_url": "https://www.reddit.com",
-            #     "rate_limit_per_minute": 60,
-            #     "config": {
-            #         "user_agent": "MyBriefingsFeedService/1.0",
-            #         "subreddits": ["news", "technology", "science", "worldnews"]
-            #     }
-            # },
+            {
+                "name": "reddit",
+                "display_name": "Reddit",
+                "base_url": "https://www.reddit.com",
+                "rate_limit_per_minute": 60,
+                "config": {
+                    "user_agent": "MyBriefingsFeedService/1.0",
+                    "subreddits": ["news", "technology", "science", "worldnews"]
+                }
+            },
             # {
             #     "name": "newsapi",
             #     "display_name": "News API",
