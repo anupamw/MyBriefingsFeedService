@@ -40,12 +40,16 @@ class RedditRunner:
     def get_subreddit_posts_with_comments(self, subreddit, limit=3, time_filter='day'):
         url = f'{self.base_url}/r/{subreddit}/top.json?limit={limit}&t={time_filter}'
         headers = {'User-Agent': self.user_agent}
+        print(f"[DEBUG] Fetching Reddit posts from: {url}")
         resp = requests.get(url, headers=headers)
+        print(f"[DEBUG] Reddit API response status: {resp.status_code}")
         if resp.status_code != 200:
+            print(f"[DEBUG] Reddit API error: {resp.text[:200]}")
             return []
         data = resp.json()
         posts = []
         if 'data' in data and 'children' in data['data']:
+            print(f"[DEBUG] Found {len(data['data']['children'])} posts in response")
             for post in data['data']['children']:
                 post_data = post['data']
                 post_id = post_data['id']
@@ -59,6 +63,8 @@ class RedditRunner:
                     'created_utc': post_data.get('created_utc', 0),
                     'top_comment': top_comment
                 })
+        else:
+            print(f"[DEBUG] No posts found in Reddit response")
         return posts
 
     def save_feed_items_with_comments(self, posts: list, data_source):
@@ -94,17 +100,26 @@ def ingest_reddit(self, subreddits: list = None, time_filter: str = "day"):
         print("Reddit data source not found or inactive")
         return {"error": "Data source not found"}
     
+    print(f"[DEBUG] Reddit ingestion started with subreddits: {subreddits}")
+    
     # Handle None subreddits
     if subreddits is None:
         subreddits = []
     
     total_created = 0
     for subreddit in subreddits:
+        print(f"[DEBUG] Processing subreddit: {subreddit}")
         posts = runner.get_subreddit_posts_with_comments(subreddit, limit=3, time_filter=time_filter)
+        print(f"[DEBUG] Got {len(posts)} posts from r/{subreddit}")
         if posts:
             results = runner.save_feed_items_with_comments(posts, data_source)
             total_created += results["created"]
+            print(f"[DEBUG] Saved {results['created']} posts from r/{subreddit}")
+        else:
+            print(f"[DEBUG] No posts found for r/{subreddit}")
+    
     runner.db.close()
+    print(f"[DEBUG] Reddit ingestion completed: {total_created} total posts created")
     return {"status": "completed", "created": total_created, "subreddits_processed": len(subreddits)}
 
 @celery_app.task(bind=True)
