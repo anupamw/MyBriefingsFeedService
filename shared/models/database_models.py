@@ -101,7 +101,10 @@ class UserCategory(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, nullable=False)
-    category_name = Column(String(140), nullable=False)
+    category_name = Column(String(140), nullable=False)  # Limited to 140 characters
+    short_summary = Column(String(50), nullable=True)  # Up to 4-word summary for display
+    subreddits = Column(Text, nullable=True)  # JSON string
+    twitter = Column(Text, nullable=True)     # JSON string
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Category preferences
