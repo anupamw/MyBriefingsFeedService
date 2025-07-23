@@ -1,0 +1,87 @@
+name: Run Database Migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_migration:
+        description: 'Run the database migration to fix title field length'
+        required: true
+        default: true
+        type: boolean
+
+env:
+  DROPLET_IP: ${{ secrets.DIGITALOCEAN_HOST }}
+  DROPLET_USER: root
+  SSH_PRIVATE_KEY: ${{ secrets.DIGITALOCEAN_SSH_KEY }}
+
+jobs:
+  run-migration:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup SSH
+      run: |
+        echo "🔧 Setting up SSH..."
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H $DROPLET_IP >> ~/.ssh/known_hosts
+        echo "SSH setup complete"
+        
+    - name: Copy migration script to droplet
+      run: |
+        echo "📤 Copying migration script to droplet..."
+        echo "🔍 Current directory: $(pwd)"
+        echo "🔍 Listing files in current directory:"
+        ls -la
+        echo "🔍 Checking if migration script exists:"
+        if [ -f "migrate_database.py" ]; then
+          echo "✅ migrate_database.py exists"
+          echo "📄 File size: $(wc -c < migrate_database.py) bytes"
+        else
+          echo "❌ migrate_database.py does not exist"
+          exit 1
+        fi
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no migrate_database.py $DROPLET_USER@$DROPLET_IP:/tmp/
+        
+    - name: Run database migration
+      run: |
+        echo "🔧 Running database migration..."
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP << 'EOF'
+          echo "🔍 Setting up environment..."
+          export DATABASE_URL="postgresql://fastapi:password@64.227.134.87:5432/briefings_feed"
+          
+          echo "🔍 Installing required packages..."
+          pip3 install sqlalchemy psycopg2-binary python-dotenv
+          
+          echo "🔍 Running migration script..."
+          cd /tmp
+          python3 migrate_database.py
+          
+          echo "✅ Migration completed!"
+        EOF
+        
+    - name: Clean up migration script
+      run: |
+        echo "🧹 Cleaning up migration script from droplet..."
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP "rm -f /tmp/migrate_database.py"
+        
+    - name: Verify migration results
+      run: |
+        echo "✅ Verifying migration results..."
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no $DROPLET_USER@$DROPLET_IP << 'EOF'
+          echo "📊 Checking feed_items table schema..."
+          psql "postgresql://fastapi:password@64.227.134.87:5432/briefings_feed" -c "\d feed_items"
+          
+          echo ""
+          echo "📊 Testing Reddit ingestion..."
+          echo "Triggering Reddit ingestion for user 1..."
+          curl -X POST "http://64.227.134.87:30101/ingest/reddit/user/1" -H "Content-Type: application/json"
+          
+          echo ""
+          echo "📊 Checking for any recent feed items..."
+          curl -s "http://64.227.134.87:30101/feed-items?limit=5&source=Reddit" | jq '.'
+        EOF 
