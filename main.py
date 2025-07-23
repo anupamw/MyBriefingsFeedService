@@ -1172,7 +1172,8 @@ async def root():
                     const ageId = `feed-card-age-${idx}`;
                     let needsMore = false;
                     if (feedText.length > 500) needsMore = true;
-                    let tagName = item.category || 'Uncategorized';
+                    // Use short_summary for display if available, else fallback to category
+                    let tagName = item.short_summary && item.short_summary.trim() ? item.short_summary : (item.category || 'Uncategorized');
                     // Special Reddit card rendering
                     if (item.source && item.source.startsWith('Reddit r/')) {
                         itemDiv.innerHTML = `
