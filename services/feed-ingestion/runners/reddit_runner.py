@@ -115,7 +115,7 @@ class RedditRunner:
                 print(f"[DEBUG] No posts found in Reddit response")
             return posts
 
-    def save_feed_items_with_comments(self, posts: list, data_source):
+    def save_feed_items_with_comments(self, posts: list, data_source, user_category_name=None):
         created = 0
         for post in posts:
             try:
@@ -123,6 +123,9 @@ class RedditRunner:
                 title = post.get("title", "Untitled")
                 if len(title) > 500:
                     title = title[:497] + "..."
+                
+                # Use user's category name if provided, otherwise use subreddit name
+                category = user_category_name if user_category_name else post.get('subreddit', 'Reddit')
                 
                 feed_item = FeedItem(
                     title=title,
@@ -134,7 +137,7 @@ class RedditRunner:
                     published_at=datetime.fromtimestamp(post.get("created_utc", datetime.utcnow().timestamp())),
                     engagement_score=post.get("score", 0),
                     raw_data=post,
-                    category=post.get('subreddit', 'Reddit'),
+                    category=category,
                     tags=["reddit", post.get("subreddit", "").lower()]
                 )
                 print(f"[DEBUG] Saving Reddit post: '{feed_item.title}' with category '{feed_item.category}'")
@@ -184,28 +187,72 @@ def ingest_reddit(self, subreddits: list = None, time_filter: str = "day"):
     return {"status": "completed", "created": total_created, "subreddits_processed": len(subreddits)}
 
 @celery_app.task(bind=True)
+def ingest_reddit_with_category(self, subreddits: list = None, category_name: str = None, time_filter: str = "day"):
+    """Ingest Reddit posts and save them with a specific category name"""
+    runner = RedditRunner()
+    data_source = runner.db.query(DataSource).filter(DataSource.name == "reddit").first()
+    print(f"[DEBUG] Reddit data source found: {data_source is not None}")
+    if data_source:
+        print(f"[DEBUG] Data source ID: {data_source.id}, Name: {data_source.name}, Active: {data_source.is_active}")
+    if not data_source:
+        print("Reddit data source not found or inactive")
+        return {"error": "Data source not found"}
+    
+    print(f"[DEBUG] Reddit ingestion started with subreddits: {subreddits}, category: {category_name}")
+    
+    # Handle None subreddits
+    if subreddits is None:
+        subreddits = []
+    
+    total_created = 0
+    for subreddit in subreddits:
+        print(f"[DEBUG] Processing subreddit: {subreddit} for category: {category_name}")
+        posts = runner.get_subreddit_posts_with_comments(subreddit, limit=3, time_filter=time_filter)
+        print(f"[DEBUG] Got {len(posts)} posts from r/{subreddit}")
+        if posts:
+            results = runner.save_feed_items_with_comments(posts, data_source, category_name)
+            total_created += results["created"]
+            print(f"[DEBUG] Saved {results['created']} posts from r/{subreddit} with category '{category_name}'")
+        else:
+            print(f"[DEBUG] No posts found for r/{subreddit}")
+        
+        # Add delay between requests to avoid rate limiting
+        time.sleep(2)
+    
+    runner.db.close()
+    print(f"[DEBUG] Reddit ingestion completed: {total_created} total posts created for category '{category_name}'")
+    return {"status": "completed", "created": total_created, "subreddits_processed": len(subreddits), "category": category_name}
+
+@celery_app.task(bind=True)
 def ingest_reddit_for_user(self, user_id: int):
     """Trigger Reddit ingestion for a specific user based on their categories"""
     from shared.models.database_models import UserCategory
     import json
     db = SessionLocal()
     user_categories = db.query(UserCategory).filter(UserCategory.user_id == user_id).all()
-    subreddits = []
-    for cat in user_categories:
-        if cat.subreddits:
+    
+    if not user_categories:
+        db.close()
+        return {"status": "no_categories", "user_id": user_id}
+    
+    # Process each user category separately
+    for user_category in user_categories:
+        if user_category.subreddits:
             try:
-                subreddits.extend(json.loads(cat.subreddits))
-            except Exception:
+                subreddits = json.loads(user_category.subreddits)
+                # Remove 'r/' prefix if present and deduplicate
+                clean_subreddits = list(set([sub.replace('r/', '') for sub in subreddits]))
+                
+                # Call ingest_reddit_with_category for each category
+                ingest_reddit_with_category.apply_async(args=[clean_subreddits, user_category.category_name])
+                print(f"[DEBUG] Scheduled Reddit ingestion for user {user_id}, category '{user_category.category_name}' with subreddits: {clean_subreddits}")
+                
+            except Exception as e:
+                print(f"[ERROR] Error processing subreddits for category {user_category.category_name}: {e}")
                 continue
-    if subreddits:
-        # Remove 'r/' prefix if present and deduplicate
-        clean_subreddits = list(set([sub.replace('r/', '') for sub in subreddits]))
-        ingest_reddit.apply_async(args=[clean_subreddits])
-        db.close()
-        return {"status": "scheduled", "user_id": user_id, "subreddits": clean_subreddits}
-    else:
-        db.close()
-        return {"status": "no_subreddits", "user_id": user_id}
+    
+    db.close()
+    return {"status": "scheduled", "user_id": user_id, "categories_processed": len(user_categories)}
 
 @celery_app.task(bind=True)
 def ingest_reddit_for_all_users(self):
