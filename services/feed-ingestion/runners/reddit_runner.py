@@ -1,6 +1,7 @@
 import os
 import requests
 import json
+import time
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from celery import current_task
@@ -18,7 +19,7 @@ load_dotenv()
 class RedditRunner:
     """Runner for Reddit API integration"""
     def __init__(self):
-        self.user_agent = "MyBriefingsFeedService/1.0"
+        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         self.base_url = "https://www.reddit.com"
         self.db = SessionLocal()
 
@@ -39,7 +40,14 @@ class RedditRunner:
 
     def get_subreddit_posts_with_comments(self, subreddit, limit=3, time_filter='day'):
         url = f'{self.base_url}/r/{subreddit}/top.json?limit={limit}&t={time_filter}'
-        headers = {'User-Agent': self.user_agent}
+        headers = {
+            'User-Agent': self.user_agent,
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+        }
         print(f"[DEBUG] Fetching Reddit posts from: {url}")
         resp = requests.get(url, headers=headers)
         print(f"[DEBUG] Reddit API response status: {resp.status_code}")
@@ -117,6 +125,9 @@ def ingest_reddit(self, subreddits: list = None, time_filter: str = "day"):
             print(f"[DEBUG] Saved {results['created']} posts from r/{subreddit}")
         else:
             print(f"[DEBUG] No posts found for r/{subreddit}")
+        
+        # Add delay between requests to avoid rate limiting
+        time.sleep(2)
     
     runner.db.close()
     print(f"[DEBUG] Reddit ingestion completed: {total_created} total posts created")
