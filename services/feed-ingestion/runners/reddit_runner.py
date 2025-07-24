@@ -117,6 +117,10 @@ class RedditRunner:
 
     def save_feed_items_with_comments(self, posts: list, data_source, user_category_name=None):
         created = 0
+        print(f"[DEBUG] Starting to save {len(posts)} Reddit posts")
+        print(f"[DEBUG] Database connection info: {self.db.bind.url}")
+        print(f"[DEBUG] User category name: {user_category_name}")
+        
         for post in posts:
             try:
                 # Truncate title to fit database field
@@ -141,13 +145,41 @@ class RedditRunner:
                     tags=["reddit", post.get("subreddit", "").lower()]
                 )
                 print(f"[DEBUG] Saving Reddit post: '{feed_item.title}' with category '{feed_item.category}'")
+                print(f"[DEBUG] Feed item details: source='{feed_item.source}', url='{feed_item.url[:50]}...'")
+                
                 self.db.add(feed_item)
                 created += 1
+                print(f"[DEBUG] Added feed item to session (created={created})")
+                
             except Exception as e:
-                print(f"Error saving Reddit post: {e}")
+                print(f"[ERROR] Error saving Reddit post: {e}")
+                import traceback
+                print(f"[ERROR] Traceback: {traceback.format_exc()}")
                 continue
-        self.db.commit()
-        print(f"[DEBUG] Successfully saved {created} Reddit posts to database")
+        
+        try:
+            print(f"[DEBUG] Committing {created} posts to database...")
+            self.db.commit()
+            print(f"[DEBUG] Successfully committed {created} Reddit posts to database")
+            
+            # Verify the posts were actually saved
+            if created > 0:
+                recent_posts = self.db.query(FeedItem).filter(
+                    FeedItem.source.like('%Reddit%'),
+                    FeedItem.category == (user_category_name if user_category_name else 'Reddit')
+                ).order_by(FeedItem.created_at.desc()).limit(created).all()
+                
+                print(f"[DEBUG] Verification: Found {len(recent_posts)} posts in database after commit")
+                for post in recent_posts:
+                    print(f"[DEBUG] Verified post: ID={post.id}, title='{post.title[:50]}...', category='{post.category}'")
+            
+        except Exception as e:
+            print(f"[ERROR] Error committing to database: {e}")
+            import traceback
+            print(f"[ERROR] Commit traceback: {traceback.format_exc()}")
+            self.db.rollback()
+            return {"created": 0, "error": str(e)}
+            
         return {"created": created}
 
 @celery_app.task(bind=True)
@@ -189,7 +221,12 @@ def ingest_reddit(self, subreddits: list = None, time_filter: str = "day"):
 @celery_app.task(bind=True)
 def ingest_reddit_with_category(self, subreddits: list = None, category_name: str = None, time_filter: str = "day"):
     """Ingest Reddit posts and save them with a specific category name"""
+    print(f"[DEBUG] ===== Starting ingest_reddit_with_category =====")
+    print(f"[DEBUG] Parameters: subreddits={subreddits}, category_name={category_name}, time_filter={time_filter}")
+    
     runner = RedditRunner()
+    print(f"[DEBUG] RedditRunner created with database: {runner.db.bind.url}")
+    
     data_source = runner.db.query(DataSource).filter(DataSource.name == "reddit").first()
     print(f"[DEBUG] Reddit data source found: {data_source is not None}")
     if data_source:
@@ -221,6 +258,7 @@ def ingest_reddit_with_category(self, subreddits: list = None, category_name: st
     
     runner.db.close()
     print(f"[DEBUG] Reddit ingestion completed: {total_created} total posts created for category '{category_name}'")
+    print(f"[DEBUG] ===== Finished ingest_reddit_with_category =====")
     return {"status": "completed", "created": total_created, "subreddits_processed": len(subreddits), "category": category_name}
 
 @celery_app.task(bind=True)
