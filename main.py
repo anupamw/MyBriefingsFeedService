@@ -1189,10 +1189,22 @@ async def root():
                     if (item.source && item.source.startsWith('Reddit r/')) {
                         itemDiv.innerHTML = `
                             <div class="reddit-card">
+                                <!-- Reddit Card Header with Category Tag -->
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span style="background: #ff4500; color: white; padding: 4px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; cursor: pointer;" data-category="${escapeHtml(tagName)}" class="category-tag">${escapeHtml(tagName)}</span>
+                                        <span style="color: #666; font-size: 0.85em;">•</span>
+                                        <span style="color: #666; font-size: 0.85em;">${escapeHtml(item.source || 'Unknown')}</span>
+                                    </div>
+                                    <div style="text-align: right; font-size: 0.8em; color: #999;">
+                                        <div id="${ageId}">${age || 'Unknown time'}</div>
+                                        <div style="font-size: 0.95em; margin-top: 2px;">${published}</div>
+                                    </div>
+                                </div>
+                                <!-- Reddit Card Content -->
                                 <div class="reddit-title">${escapeHtml(item.title)}</div>
                                 <div class="reddit-top-comment">${item.content ? `<span style='color:#888;font-size:0.95em;'>Top comment:</span> ${escapeHtml(item.content)}` : ''}</div>
                                 <div class="reddit-meta">
-                                    <span>${escapeHtml(item.source)}</span>
                                     <a href="${escapeHtml(item.url)}" target="_blank">View on Reddit →</a>
                                 </div>
                             </div>
@@ -1626,15 +1638,42 @@ async def get_feed(limit: int = 10, offset: int = 0, category: Optional[str] = N
     try:
         # If a category is specified, filter by it (existing behavior)
         if category:
-            # Create reverse mapping from short_summary to category_name for filtering
+            # Get user categories to understand the mapping
             user_categories = db.query(UserCategoryDB).filter(UserCategoryDB.user_id == current_user["id"]).all()
+            
+            # Create mappings for both directions
             short_summary_to_category = {cat.short_summary: cat.category_name for cat in user_categories if cat.short_summary}
+            category_to_short_summary = {cat.category_name: cat.short_summary for cat in user_categories if cat.short_summary}
             
-            # If the category parameter is a short_summary, find the corresponding category_name
-            actual_category = short_summary_to_category.get(category, category)
-            print(f"[DEBUG] Filtering: received '{category}', using '{actual_category}'")
+            # Determine what we're filtering by
+            # If the category parameter matches a short_summary, we need to find items with that short_summary
+            # If the category parameter matches a category_name, we need to find items with that category_name
+            # We need to check both possibilities
             
-            query = db.query(FeedItemDB).filter(FeedItemDB.category == actual_category)
+            category_filters = []
+            
+            # Check if the category parameter is a short_summary
+            if category in short_summary_to_category.values():
+                category_filters.append(category)  # This will match Reddit items saved with short_summary
+            
+            # Check if the category parameter is a category_name
+            if category in category_to_short_summary.keys():
+                category_filters.append(category)  # This will match Perplexity items saved with category_name
+            
+            # Also check the reverse mapping
+            if category in short_summary_to_category:
+                category_filters.append(short_summary_to_category[category])  # Map short_summary to category_name
+            
+            # Remove duplicates
+            category_filters = list(set(category_filters))
+            
+            print(f"[DEBUG] Filtering: received '{category}', using filters: {category_filters}")
+            
+            if category_filters:
+                query = db.query(FeedItemDB).filter(FeedItemDB.category.in_(category_filters))
+            else:
+                # Fallback: try exact match
+                query = db.query(FeedItemDB).filter(FeedItemDB.category == category)
         else:
             # Check if user has any categories
             user_categories = db.query(UserCategoryDB).filter(UserCategoryDB.user_id == current_user["id"]).all()
