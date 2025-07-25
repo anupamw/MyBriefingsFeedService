@@ -358,9 +358,12 @@ def ingest_reddit_for_user(self, user_id: int):
                 # Remove 'r/' prefix if present and deduplicate
                 clean_subreddits = list(set([sub.replace('r/', '') for sub in subreddits]))
                 
+                # Use short_summary for category if available, otherwise fallback to category_name
+                category_for_saving = user_category.short_summary if user_category.short_summary else user_category.category_name
+                
                 # Call ingest_reddit_with_category for each category
-                ingest_reddit_with_category.apply_async(args=[clean_subreddits, user_category.category_name])
-                print(f"[DEBUG] Scheduled Reddit ingestion for user {user_id}, category '{user_category.category_name}' with subreddits: {clean_subreddits}")
+                ingest_reddit_with_category.apply_async(args=[clean_subreddits, category_for_saving])
+                print(f"[DEBUG] Scheduled Reddit ingestion for user {user_id}, category '{user_category.category_name}' (saving as '{category_for_saving}') with subreddits: {clean_subreddits}")
                 
             except Exception as e:
                 print(f"[ERROR] Error processing subreddits for category {user_category.category_name}: {e}")

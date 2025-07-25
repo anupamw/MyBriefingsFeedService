@@ -893,6 +893,16 @@ async def root():
                     });
                     if (response.ok) {
                         const feedItems = await response.json();
+                        console.log('[DEBUG] Feed API returned:', feedItems.length, 'items');
+                        console.log('[DEBUG] Feed items:', feedItems);
+                        
+                        // Check for Reddit items specifically
+                        const redditItems = feedItems.filter(item => item.source && item.source.includes('Reddit'));
+                        console.log('[DEBUG] Reddit items found:', redditItems.length);
+                        redditItems.forEach(item => {
+                            console.log('[DEBUG] Reddit item:', {id: item.id, title: item.title, category: item.category, source: item.source});
+                        });
+                        
                         displayFeed(feedItems);
                         updatePaginationControls(feedItems.length);
                         loadCategories();
@@ -1629,8 +1639,14 @@ async def get_feed(limit: int = 10, offset: int = 0, category: Optional[str] = N
             # Check if user has any categories
             user_categories = db.query(UserCategoryDB).filter(UserCategoryDB.user_id == current_user["id"]).all()
             if user_categories:
-                category_names = [cat.category_name for cat in user_categories]
-                query = db.query(FeedItemDB).filter(FeedItemDB.category.in_(category_names))
+                # Use short_summary for filtering if available, otherwise fallback to category_name
+                category_filters = []
+                for cat in user_categories:
+                    if cat.short_summary:
+                        category_filters.append(cat.short_summary)
+                    else:
+                        category_filters.append(cat.category_name)
+                query = db.query(FeedItemDB).filter(FeedItemDB.category.in_(category_filters))
             else:
                 # No user categories, show only the global feed for the single common category
                 query = db.query(FeedItemDB).filter(FeedItemDB.category == "What is the happening in the world right now?")
