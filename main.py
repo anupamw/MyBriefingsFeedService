@@ -1639,13 +1639,17 @@ async def get_feed(limit: int = 10, offset: int = 0, category: Optional[str] = N
             # Check if user has any categories
             user_categories = db.query(UserCategoryDB).filter(UserCategoryDB.user_id == current_user["id"]).all()
             if user_categories:
-                # Use short_summary for filtering if available, otherwise fallback to category_name
+                # Create a list of all possible category values to filter by
+                # This includes both short_summary and category_name to handle both Reddit and Perplexity items
                 category_filters = []
                 for cat in user_categories:
+                    # Add short_summary if available (for Reddit items)
                     if cat.short_summary:
                         category_filters.append(cat.short_summary)
-                    else:
-                        category_filters.append(cat.category_name)
+                    # Add category_name (for Perplexity items)
+                    category_filters.append(cat.category_name)
+                # Remove duplicates while preserving order
+                category_filters = list(dict.fromkeys(category_filters))
                 query = db.query(FeedItemDB).filter(FeedItemDB.category.in_(category_filters))
             else:
                 # No user categories, show only the global feed for the single common category
