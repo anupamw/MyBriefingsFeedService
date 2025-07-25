@@ -7,15 +7,60 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from celery import current_task
 from dotenv import load_dotenv
+from sqlalchemy import Column, Integer, String, DateTime, Text
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import Session
 
 # Import shared components
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../../'))
-from shared.database.connection import SessionLocal
+from shared.database.connection import SessionLocal, engine
 from shared.models.database_models import DataSource, FeedItem, IngestionJob
 from celery_app import celery_app
 
 load_dotenv()
+
+# In-memory Reddit call history for debugging
+REDDIT_HISTORY_LIMIT = 100
+
+Base = declarative_base()
+
+class RedditCallHistory(Base):
+    __tablename__ = "reddit_call_history"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    subreddit = Column(String(140))
+    url = Column(String(500))
+    response_status_code = Column(Integer)
+    posts_found = Column(Integer)
+    posts_saved = Column(Integer)
+    error_message = Column(Text, nullable=True)
+    response_content = Column(Text, nullable=True)  # Store response text for debugging
+
+# Ensure table exists (run at import)
+Base.metadata.create_all(bind=engine)
+
+def add_reddit_history_db(subreddit, url, response_status_code, posts_found, posts_saved, error_message=None, response_content=None):
+    print(f"[DEBUG] Attempting to log Reddit call: subreddit={subreddit}, url={url[:60]}, status={response_status_code}, posts_found={posts_found}, posts_saved={posts_saved}")
+    db = SessionLocal()
+    try:
+        record = RedditCallHistory(
+            timestamp=datetime.utcnow(),
+            subreddit=subreddit,
+            url=url,
+            response_status_code=response_status_code,
+            posts_found=posts_found,
+            posts_saved=posts_saved,
+            error_message=error_message,
+            response_content=response_content
+        )
+        db.add(record)
+        db.commit()
+        print(f"[DEBUG] Successfully logged Reddit call to DB (id={record.id})")
+    except Exception as e:
+        print(f"[ERROR] Failed to log Reddit call: {e}")
+    finally:
+        db.close()
 
 class RedditRunner:
     """Runner for Reddit API integration"""
@@ -75,6 +120,16 @@ class RedditRunner:
                     'created_utc': published.timestamp(),
                     'top_comment': None  # RSS doesn't provide comments
                 })
+            
+            # Log successful RSS call
+            add_reddit_history_db(
+                subreddit=subreddit,
+                url=rss_url,
+                response_status_code=resp.status_code,
+                posts_found=len(feed.entries),
+                posts_saved=len(posts),
+                response_content=resp.text[:1000] if resp.text else None
+            )
             return posts
         else:
             print(f"[DEBUG] RSS failed, trying JSON API as fallback")
@@ -91,28 +146,50 @@ class RedditRunner:
             print(f"[DEBUG] Fetching Reddit posts from: {url}")
             resp = requests.get(url, headers=headers)
             print(f"[DEBUG] Reddit API response status: {resp.status_code}")
-            if resp.status_code != 200:
-                print(f"[DEBUG] Reddit API error: {resp.text[:200]}")
-                return []
-            data = resp.json()
+            
             posts = []
-            if 'data' in data and 'children' in data['data']:
-                print(f"[DEBUG] Found {len(data['data']['children'])} posts in response")
-                for post in data['data']['children']:
-                    post_data = post['data']
-                    post_id = post_data['id']
-                    top_comment = self.get_top_comment(subreddit, post_id)
-                    posts.append({
-                        'title': post_data.get('title', ''),
-                        'summary': post_data.get('selftext', ''),
-                        'score': post_data.get('score', 0),
-                        'url': f"https://reddit.com{post_data.get('permalink', '')}",
-                        'subreddit': subreddit,
-                        'created_utc': post_data.get('created_utc', 0),
-                        'top_comment': top_comment
-                    })
+            if resp.status_code == 200:
+                data = resp.json()
+                if 'data' in data and 'children' in data['data']:
+                    print(f"[DEBUG] Found {len(data['data']['children'])} posts in response")
+                    for post in data['data']['children']:
+                        post_data = post['data']
+                        post_id = post_data['id']
+                        top_comment = self.get_top_comment(subreddit, post_id)
+                        posts.append({
+                            'title': post_data.get('title', ''),
+                            'summary': post_data.get('selftext', ''),
+                            'score': post_data.get('score', 0),
+                            'url': f"https://reddit.com{post_data.get('permalink', '')}",
+                            'subreddit': subreddit,
+                            'created_utc': post_data.get('created_utc', 0),
+                            'top_comment': top_comment
+                        })
+                else:
+                    print(f"[DEBUG] No posts found in Reddit response")
+                
+                # Log successful JSON API call
+                add_reddit_history_db(
+                    subreddit=subreddit,
+                    url=url,
+                    response_status_code=resp.status_code,
+                    posts_found=len(data.get('data', {}).get('children', [])) if resp.status_code == 200 else 0,
+                    posts_saved=len(posts),
+                    response_content=resp.text[:1000] if resp.text else None
+                )
             else:
-                print(f"[DEBUG] No posts found in Reddit response")
+                print(f"[DEBUG] Reddit API error: {resp.text[:200]}")
+                # Log failed API call
+                add_reddit_history_db(
+                    subreddit=subreddit,
+                    url=url,
+                    response_status_code=resp.status_code,
+                    posts_found=0,
+                    posts_saved=0,
+                    error_message=resp.text[:500] if resp.text else "No response text",
+                    response_content=resp.text[:1000] if resp.text else None
+                )
+            
             return posts
 
     def save_feed_items_with_comments(self, posts: list, data_source, user_category_name=None):
@@ -321,4 +398,31 @@ if __name__ == "__main__":
     # For now, keeping the original test structure.
     # posts = runner.get_subreddit_posts_with_comments("technology", limit=5)
     # print(json.dumps(posts, indent=2))
-    pass # Removed the test call as authenticate is removed 
+    pass # Removed the test call as authenticate is removed
+
+# Add FastAPI debug endpoint if this file is run as main or imported in a FastAPI app
+try:
+    from fastapi import APIRouter
+    router = APIRouter()
+    @router.get("/debug/reddit-history")
+    async def get_reddit_history():
+        db = SessionLocal()
+        try:
+            records = db.query(RedditCallHistory).order_by(RedditCallHistory.timestamp.desc()).limit(100).all()
+            return [
+                {
+                    'timestamp': r.timestamp.isoformat() + 'Z',
+                    'subreddit': r.subreddit,
+                    'url': r.url,
+                    'response_status_code': r.response_status_code,
+                    'posts_found': r.posts_found,
+                    'posts_saved': r.posts_saved,
+                    'error_message': r.error_message,
+                    'response_content': r.response_content
+                }
+                for r in records
+            ]
+        finally:
+            db.close()
+except ImportError:
+    pass 

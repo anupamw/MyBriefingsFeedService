@@ -16,7 +16,7 @@ from shared.database.connection import SessionLocal, init_database
 from shared.models.database_models import DataSource, FeedItem, IngestionJob, UserCategory, UserDB
 from celery_app import celery_app
 from runners.perplexity_runner import PerplexityRunner, router as perplexity_debug_router
-from runners.reddit_runner import RedditRunner
+from runners.reddit_runner import RedditRunner, router as reddit_debug_router
 from runners.social_runner import SocialRunner
 
 load_dotenv()
@@ -584,6 +584,51 @@ async def debug_user_feed(user_id: int, db: SessionLocal = Depends(get_db)):
         ]
     }
 
+@app.get("/debug/reddit-feed")
+async def debug_reddit_feed(
+    user_id: Optional[int] = None,
+    category: Optional[str] = None,
+    limit: int = 20,
+    db: SessionLocal = Depends(get_db)
+):
+    """Debug endpoint: show Reddit feed items with filtering options"""
+    query = db.query(FeedItem).filter(FeedItem.source.like('%Reddit%'))
+    
+    # Filter by user if specified
+    if user_id:
+        user_categories = db.query(UserCategory).filter(UserCategory.user_id == user_id).all()
+        category_names = [cat.category_name for cat in user_categories]
+        if category_names:
+            query = query.filter(FeedItem.category.in_(category_names))
+    
+    # Filter by category if specified
+    if category:
+        query = query.filter(FeedItem.category == category)
+    
+    # Get recent items
+    reddit_items = query.order_by(FeedItem.created_at.desc()).limit(limit).all()
+    
+    return {
+        "total_reddit_items": len(reddit_items),
+        "filters_applied": {
+            "user_id": user_id,
+            "category": category,
+            "limit": limit
+        },
+        "reddit_items": [
+            {
+                "id": item.id,
+                "title": item.title,
+                "category": item.category,
+                "source": item.source,
+                "url": item.url,
+                "created_at": to_utc_z(item.created_at) if item.created_at else None,
+                "published_at": to_utc_z(item.published_at) if item.published_at else None
+            }
+            for item in reddit_items
+        ]
+    }
+
 # Feed data deletion APIs
 @app.delete("/feed-items/delete/user/{user_id}")
 async def delete_feed_data_for_user(
@@ -866,6 +911,7 @@ async def perplexity_derivatives(request: Request):
         return {"error": f"Exception calling Perplexity: {e}"}
 
 app.include_router(perplexity_debug_router)
+app.include_router(reddit_debug_router)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001) 
