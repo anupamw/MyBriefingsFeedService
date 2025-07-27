@@ -714,17 +714,17 @@ async def root():
         </div>
         
         <div class="feed-container" id="feed-container">
-            <div class="feed-header">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <div>
-                        <h1 id="feed-header-title">Welcome to Your Feed! 📰</h1>
-                        <p>Here are your personalized news briefings</p>
+                            <div class="feed-header">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <div>
+                            <h1 id="feed-header-title">Welcome to Your Feed! 📰</h1>
+                            <p>Here are your personalized news briefings</p>
+                        </div>
+                        <div id="digital-clock" style="background: #f8f9fa; color: #495057; padding: 7px 16px; border-radius: 8px; font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace; font-size: 1.05em; font-weight: 500; letter-spacing: 0.01em; box-shadow: 0 1px 4px rgba(40,60,80,0.06); border: 1px solid #dee2e6; display: inline-block; margin-left: 10px;">
+                        </div>
                     </div>
-                    <div id="digital-clock" style="background: #f8f9fa; color: #495057; padding: 7px 16px; border-radius: 8px; font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace; font-size: 1.05em; font-weight: 500; letter-spacing: 0.01em; box-shadow: 0 1px 4px rgba(40,60,80,0.06); border: 1px solid #dee2e6; display: inline-block; margin-left: 10px;">
-                    </div>
+                    <button class="logout-btn" onclick="logout()">Logout</button>
                 </div>
-                <button class="logout-btn" onclick="logout()">Logout</button>
-            </div>
             
             <div class="main-content">
                 <div class="sidebar">
@@ -1481,6 +1481,8 @@ async def root():
                     moreSpan.textContent = 'Less';
                 }
             }
+
+
         </script>
     </body>
     </html>
@@ -1647,7 +1649,7 @@ async def delete_user_account(current_user: dict = Depends(get_current_user)):
         db.close()
 
 @app.get("/feed", response_model=List[FeedItem])
-async def get_feed(limit: int = 10, offset: int = 0, category: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+async def get_feed(limit: int = 10, offset: int = 0, category: Optional[str] = None, randomize: bool = True, current_user: dict = Depends(get_current_user)):
     """Get feed items with pagination (protected route)"""
     db = SessionLocal()
     try:
@@ -1708,8 +1710,19 @@ async def get_feed(limit: int = 10, offset: int = 0, category: Optional[str] = N
             else:
                 # No user categories, show only the global feed for the single common category
                 query = db.query(FeedItemDB).filter(FeedItemDB.category == "What is the happening in the world right now?")
+        # Get items with standard ordering first
         query = query.order_by(FeedItemDB.published_at.desc(), FeedItemDB.created_at.desc())
-        items = query.offset(offset).limit(limit).all()
+        
+        if randomize:
+            # Get more items for better randomization
+            items = query.offset(offset).limit(limit * 2).all()
+            # Randomize the items to mix up sources and categories
+            import random
+            random.shuffle(items)
+            items = items[:limit]  # Take only the requested limit
+        else:
+            # Standard ordering without randomization
+            items = query.offset(offset).limit(limit).all()
         # Build a mapping from category_name to short_summary for this user
         user_category_map = {cat.category_name: cat.short_summary for cat in db.query(UserCategoryDB).filter(UserCategoryDB.user_id == current_user["id"]).all()}
         print(f"[DEBUG] User category map: {user_category_map}")
