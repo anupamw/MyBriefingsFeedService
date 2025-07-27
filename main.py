@@ -1215,7 +1215,6 @@ async def root():
                                 </div>
                                 <!-- Reddit Card Content -->
                                 <div class="reddit-title">${escapeHtml(item.title)}</div>
-                                ${item.summary ? `<div class="reddit-post-content">${escapeHtml(item.summary)}</div>` : ''}
                                 ${item.content ? `<div class="reddit-top-comment"><span style='color:#888;font-size:0.95em;'>Top comment:</span> ${escapeHtml(item.content)}</div>` : ''}
                                 <div class="reddit-meta">
                                     <a href="${escapeHtml(item.url)}" target="_blank">View on Reddit →</a>
