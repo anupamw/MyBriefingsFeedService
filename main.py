@@ -198,6 +198,7 @@ class Item(BaseModel):
 
 class FeedItem(BaseModel):
     id: int
+    title: Optional[str] = None
     summary: Optional[str] = None
     content: Optional[str] = None
     url: Optional[str] = None
@@ -1197,6 +1198,7 @@ async def root():
                     // Use short_summary for display if available, else fallback to category
                     let tagName = item.short_summary && item.short_summary.trim() ? item.short_summary : (item.category || 'Uncategorized');
                     console.log(`[DEBUG] Feed item ${item.id}: category='${item.category}', short_summary='${item.short_summary}', final tagName='${tagName}'`);
+                    console.log(`[DEBUG] Reddit item data: title='${item.title}', content='${item.content}', source='${item.source}'`);
                     // Special Reddit card rendering
                     if (item.source && item.source.startsWith('Reddit r/')) {
                         itemDiv.innerHTML = `
@@ -1214,8 +1216,9 @@ async def root():
                                     </div>
                                 </div>
                                 <!-- Reddit Card Content -->
-                                <div class="reddit-title">${escapeHtml(item.title)}</div>
+                                <div class="reddit-title">${escapeHtml(item.title || 'No title available')}</div>
                                 ${item.content ? `<div class="reddit-top-comment"><span style='color:#888;font-size:0.95em;'>Top comment:</span> ${escapeHtml(item.content)}</div>` : ''}
+                                ${!item.title && !item.content ? `<div style="color: #666; font-style: italic;">No content available</div>` : ''}
                                 <div class="reddit-meta">
                                     <a href="${escapeHtml(item.url)}" target="_blank">View on Reddit →</a>
                                 </div>
@@ -1720,6 +1723,7 @@ async def get_feed(limit: int = 10, offset: int = 0, category: Optional[str] = N
             print(f"[DEBUG] Feed item category: '{item.category}' -> short_summary: '{short_summary}'")
             result.append(FeedItem(
                 id=item.id,
+                title=item.title,
                 summary=item.summary,
                 content=item.content,
                 url=item.url,
@@ -1754,6 +1758,7 @@ async def get_feed_item(item_id: int, current_user: dict = Depends(get_current_u
         
         return FeedItem(
             id=item.id,
+            title=item.title,
             summary=item.summary,
             content=item.content,
             url=item.url,
