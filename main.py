@@ -634,7 +634,7 @@ async def root():
             }
             .reddit-card .reddit-title {
                 font-size: 1.15em;
-                font-weight: 700;
+                font-weight: 400;
                 color: #ff4500;
                 margin-bottom: 8px;
             }
