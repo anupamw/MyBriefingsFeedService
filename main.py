@@ -658,6 +658,18 @@ async def root():
             .reddit-card a:hover {
                 text-decoration: underline;
             }
+            .reddit-card .reddit-post-content {
+                color: #333;
+                font-size: 1em;
+                line-height: 1.5;
+                margin: 12px 0;
+                padding: 12px;
+                background: #f8f9fa;
+                border-radius: 8px;
+                border-left: 3px solid #ff4500;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+            }
         </style>
     </head>
     <body>
@@ -1203,7 +1215,8 @@ async def root():
                                 </div>
                                 <!-- Reddit Card Content -->
                                 <div class="reddit-title">${escapeHtml(item.title)}</div>
-                                <div class="reddit-top-comment">${item.content ? `<span style='color:#888;font-size:0.95em;'>Top comment:</span> ${escapeHtml(item.content)}` : ''}</div>
+                                ${item.summary ? `<div class="reddit-post-content">${escapeHtml(item.summary)}</div>` : ''}
+                                ${item.content ? `<div class="reddit-top-comment"><span style='color:#888;font-size:0.95em;'>Top comment:</span> ${escapeHtml(item.content)}</div>` : ''}
                                 <div class="reddit-meta">
                                     <a href="${escapeHtml(item.url)}" target="_blank">View on Reddit →</a>
                                 </div>
