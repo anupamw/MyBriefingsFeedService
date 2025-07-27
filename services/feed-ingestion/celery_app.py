@@ -16,7 +16,8 @@ celery_app = Celery(
     include=[
         "runners.perplexity_runner",
         "runners.reddit_runner",
-        "runners.social_runner"
+        "runners.social_runner",
+        "runners.newsapi_runner"
     ]
 )
 

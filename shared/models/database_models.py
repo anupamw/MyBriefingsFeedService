@@ -35,6 +35,7 @@ class FeedItem(Base):
     summary = Column(Text)
     content = Column(Text)
     url = Column(String(1000))
+    image_url = Column(String(1000))  # Image URL for the feed item
     source = Column(String(100))  # Original source (e.g., "BBC", "TechCrunch")
     published_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)

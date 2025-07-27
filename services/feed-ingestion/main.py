@@ -18,6 +18,7 @@ from celery_app import celery_app
 from runners.perplexity_runner import PerplexityRunner, router as perplexity_debug_router
 from runners.reddit_runner import RedditRunner, router as reddit_debug_router
 from runners.social_runner import SocialRunner
+from runners.newsapi_runner import NewsAPIRunner, router as newsapi_debug_router
 
 load_dotenv()
 
@@ -74,6 +75,7 @@ class FeedItemResponse(BaseModel):
     summary: Optional[str] = None
     content: Optional[str] = None
     url: Optional[str] = None
+    image_url: Optional[str] = None
     source: Optional[str] = None
     published_at: Optional[str] = None
     created_at: str
@@ -345,6 +347,63 @@ async def trigger_social_ingestion(sources: Optional[List[str]] = None):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to start ingestion job: {str(e)}")
 
+@app.post("/ingest/newsapi/headlines")
+async def trigger_newsapi_headlines_ingestion(
+    categories: Optional[List[str]] = None,
+    countries: Optional[List[str]] = None
+):
+    """Trigger NewsAPI headlines ingestion job"""
+    try:
+        # Submit Celery task
+        task = celery_app.send_task(
+            "runners.newsapi_runner.ingest_newsapi_headlines",
+            args=[categories, countries]
+        )
+        
+        return {
+            "message": "NewsAPI headlines ingestion job started",
+            "task_id": task.id,
+            "status": "pending"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start NewsAPI headlines ingestion: {str(e)}")
+
+@app.post("/ingest/newsapi/search")
+async def trigger_newsapi_search_ingestion(queries: Optional[List[str]] = None):
+    """Trigger NewsAPI search ingestion job"""
+    try:
+        # Submit Celery task
+        task = celery_app.send_task(
+            "runners.newsapi_runner.ingest_newsapi_search",
+            args=[queries]
+        )
+        
+        return {
+            "message": "NewsAPI search ingestion job started",
+            "task_id": task.id,
+            "status": "pending"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start NewsAPI search ingestion: {str(e)}")
+
+@app.post("/ingest/newsapi/user/{user_id}")
+async def trigger_newsapi_ingestion_for_user(user_id: int):
+    """Trigger NewsAPI ingestion for a specific user based on their categories"""
+    try:
+        # Submit Celery task
+        task = celery_app.send_task(
+            "runners.newsapi_runner.ingest_newsapi_for_user",
+            args=[user_id]
+        )
+        
+        return {
+            "message": f"NewsAPI ingestion for user {user_id} started",
+            "task_id": task.id,
+            "status": "pending"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start NewsAPI ingestion for user: {str(e)}")
+
 @app.get("/feed-items", response_model=List[FeedItemResponse])
 async def get_feed_items(
     limit: int = 50,
@@ -383,6 +442,7 @@ async def get_feed_items(
             summary=item.summary,
             content=item.content,
             url=item.url,
+            image_url=item.image_url,
             source=item.source,
             published_at=to_utc_z(item.published_at),
             created_at=to_utc_z(item.created_at),
@@ -426,6 +486,7 @@ async def get_user_feed_items(
             summary=item.summary,
             content=item.content,
             url=item.url,
+            image_url=item.image_url,
             source=item.source,
             published_at=to_utc_z(item.published_at),
             created_at=to_utc_z(item.created_at),
@@ -912,6 +973,7 @@ async def perplexity_derivatives(request: Request):
 
 app.include_router(perplexity_debug_router)
 app.include_router(reddit_debug_router)
+app.include_router(newsapi_debug_router)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001) 
