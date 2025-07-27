@@ -3,6 +3,7 @@ import requests
 import json
 import time
 import feedparser
+import re
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from celery import current_task
@@ -69,6 +70,39 @@ class RedditRunner:
         self.base_url = "https://www.reddit.com"
         self.db = SessionLocal()
 
+    def parse_html_content(self, html_content: str) -> str:
+        """Parse HTML content and extract clean text"""
+        if not html_content:
+            return ""
+        
+        # Remove HTML tags using regex
+        # First, remove script and style tags and their content
+        html_content = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+        html_content = re.sub(r'<style[^>]*>.*?</style>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+        
+        # Remove HTML tags but preserve line breaks
+        html_content = re.sub(r'<br\s*/?>', '\n', html_content, flags=re.IGNORECASE)
+        html_content = re.sub(r'</p>', '\n', html_content, flags=re.IGNORECASE)
+        html_content = re.sub(r'<p[^>]*>', '', html_content, flags=re.IGNORECASE)
+        
+        # Remove all other HTML tags
+        html_content = re.sub(r'<[^>]+>', '', html_content)
+        
+        # Decode HTML entities
+        html_content = html_content.replace('&amp;', '&')
+        html_content = html_content.replace('&lt;', '<')
+        html_content = html_content.replace('&gt;', '>')
+        html_content = html_content.replace('&quot;', '"')
+        html_content = html_content.replace('&#39;', "'")
+        html_content = html_content.replace('&nbsp;', ' ')
+        
+        # Clean up whitespace
+        html_content = re.sub(r'\n\s*\n', '\n\n', html_content)  # Remove extra blank lines
+        html_content = re.sub(r'[ \t]+', ' ', html_content)  # Normalize spaces
+        html_content = html_content.strip()
+        
+        return html_content
+
     def get_top_comment(self, subreddit, post_id):
         url = f'{self.base_url}/r/{subreddit}/comments/{post_id}.json?limit=1'
         headers = {'User-Agent': self.user_agent}
@@ -111,9 +145,16 @@ class RedditRunner:
                 if hasattr(entry, 'published_parsed') and entry.published_parsed:
                     published = datetime(*entry.published_parsed[:6])
                 
+                # Parse HTML content from summary
+                raw_summary = entry.get('summary', '')
+                clean_summary = self.parse_html_content(raw_summary)
+                
+                print(f"[DEBUG] Raw summary for '{entry.get('title', '')}': {raw_summary[:200]}...")
+                print(f"[DEBUG] Cleaned summary: {clean_summary[:200]}...")
+                
                 posts.append({
                     'title': entry.get('title', ''),
-                    'summary': entry.get('summary', ''),
+                    'summary': clean_summary,
                     'score': 0,  # RSS doesn't provide scores
                     'url': entry.get('link', ''),
                     'subreddit': subreddit,
