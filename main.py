@@ -872,7 +872,7 @@ async def root():
             }
             
             let currentOffset = 0;
-            const FEED_LIMIT = 10;
+            const FEED_LIMIT = 30;
             let currentCategoryFilter = null;
 
             async function showFeed(offset = 0, categoryFilter = null) {
@@ -1649,7 +1649,7 @@ async def delete_user_account(current_user: dict = Depends(get_current_user)):
         db.close()
 
 @app.get("/feed", response_model=List[FeedItem])
-async def get_feed(limit: int = 10, offset: int = 0, category: Optional[str] = None, randomize: bool = True, current_user: dict = Depends(get_current_user)):
+async def get_feed(limit: int = 30, offset: int = 0, category: Optional[str] = None, randomize: bool = True, current_user: dict = Depends(get_current_user)):
     """Get feed items with pagination (protected route)"""
     db = SessionLocal()
     try:
