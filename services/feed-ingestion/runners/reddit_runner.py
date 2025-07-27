@@ -95,11 +95,28 @@ class RedditRunner:
         html_content = html_content.replace('&quot;', '"')
         html_content = html_content.replace('&#39;', "'")
         html_content = html_content.replace('&nbsp;', ' ')
+        html_content = html_content.replace('&#32;', ' ')
         
-        # Clean up whitespace
+        # Remove Reddit-specific metadata patterns
+        # Remove "submitted by /u/username" patterns
+        html_content = re.sub(r'submitted by\s+/u/[^\s]+', '', html_content, flags=re.IGNORECASE)
+        # Remove "[link]" and "[comments]" patterns
+        html_content = re.sub(r'\[link\]', '', html_content, flags=re.IGNORECASE)
+        html_content = re.sub(r'\[comments\]', '', html_content, flags=re.IGNORECASE)
+        # Remove any remaining Reddit user references
+        html_content = re.sub(r'/u/[^\s]+', '', html_content)
+        # Remove any remaining Reddit subreddit references
+        html_content = re.sub(r'/r/[^\s]+', '', html_content)
+        
+        # Clean up whitespace and extra spaces
         html_content = re.sub(r'\n\s*\n', '\n\n', html_content)  # Remove extra blank lines
         html_content = re.sub(r'[ \t]+', ' ', html_content)  # Normalize spaces
+        html_content = re.sub(r'\s+', ' ', html_content)  # Replace multiple spaces with single space
         html_content = html_content.strip()
+        
+        # Remove any leading/trailing punctuation that might be left
+        html_content = re.sub(r'^[^\w]*', '', html_content)  # Remove leading non-word chars
+        html_content = re.sub(r'[^\w]*$', '', html_content)  # Remove trailing non-word chars
         
         return html_content
 
