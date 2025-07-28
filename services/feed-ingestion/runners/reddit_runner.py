@@ -388,23 +388,77 @@ def ingest_reddit_for_user(self, user_id: int):
 
 @celery_app.task(bind=True)
 def ingest_reddit_for_all_users(self):
-    from shared.models.database_models import UserCategory, UserDB
+    """Trigger Reddit ingestion for all users with categories"""
+    from shared.models.database_models import UserCategory
     import json
+    
     db = SessionLocal()
-    user_ids = [u.id for u in db.query(UserDB.id).all()]
-    for user_id in user_ids:
-        user_categories = db.query(UserCategory).filter(UserCategory.user_id == user_id).all()
-        subreddits = []
-        for cat in user_categories:
-            if cat.subreddits:
-                try:
-                    subreddits.extend(json.loads(cat.subreddits))
-                except Exception:
-                    continue
-        if subreddits:
-            ingest_reddit.apply_async(args=[list(set(subreddits))])
-    db.close()
-    return {"status": "scheduled"}
+    
+    # Get all users with categories
+    user_categories = db.query(UserCategory).filter(
+        UserCategory.is_active == True
+    ).all()
+    
+    if not user_categories:
+        db.close()
+        return {"status": "no_users_with_categories"}
+    
+    # Group categories by user
+    users_with_categories = {}
+    for user_cat in user_categories:
+        if user_cat.user_id not in users_with_categories:
+            users_with_categories[user_cat.user_id] = []
+        users_with_categories[user_cat.user_id].append(user_cat)
+    
+    total_scheduled = 0
+    users_processed = 0
+    
+    try:
+        for user_id, categories in users_with_categories.items():
+            # Update task progress
+            self.update_state(
+                state="PROGRESS",
+                meta={
+                    "current_user": user_id,
+                    "processed": users_processed + 1,
+                    "total": len(users_with_categories)
+                }
+            )
+            
+            for user_category in categories:
+                if user_category.subreddits:
+                    try:
+                        subreddits = json.loads(user_category.subreddits)
+                        # Remove 'r/' prefix if present and deduplicate
+                        clean_subreddits = list(set([sub.replace('r/', '') for sub in subreddits]))
+                        
+                        # Use short_summary for category if available, otherwise fallback to category_name
+                        category_for_saving = user_category.short_summary if user_category.short_summary else user_category.category_name
+                        
+                        # Schedule Reddit ingestion for this category
+                        ingest_reddit_with_category.apply_async(args=[clean_subreddits, category_for_saving])
+                        total_scheduled += 1
+                        print(f"[DEBUG] Scheduled Reddit ingestion for user {user_id}, category '{user_category.category_name}' (saving as '{category_for_saving}') with subreddits: {clean_subreddits}")
+                        
+                    except Exception as e:
+                        print(f"[ERROR] Error processing subreddits for category {user_category.category_name}: {e}")
+                        continue
+            
+            users_processed += 1
+        
+        return {
+            "status": "completed",
+            "scheduled": total_scheduled,
+            "users_processed": users_processed,
+            "total_users": len(users_with_categories)
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] Reddit all users ingestion failed: {e}")
+        raise self.retry(countdown=60, max_retries=3)
+    
+    finally:
+        db.close()
 
 if __name__ == "__main__":
     # Test the runner
