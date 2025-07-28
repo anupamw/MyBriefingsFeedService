@@ -241,13 +241,13 @@ jobs:
             NEWS_API_KEY=""
           fi
           
-          # Create the api-keys secret using kubectl create
-          kubectl create secret generic api-keys \
+          # Create the api-secrets secret using kubectl create
+          kubectl create secret generic api-secrets \
             --namespace=my-briefings \
             --from-literal=perplexity-api-key="$PERPLEXITY_API_KEY" \
             --from-literal=news-api-key="$NEWS_API_KEY" \
             --dry-run=client -o yaml | kubectl apply -f -
-          echo "✅ Kubernetes secret 'api-keys' created/updated with both Perplexity and NewsAPI keys"
+          echo "✅ Kubernetes secret 'api-secrets' created/updated with both Perplexity and NewsAPI keys"
           
           kubectl apply -f ~/k8s/deployment.yaml
           kubectl apply -f ~/k8s/service.yaml
