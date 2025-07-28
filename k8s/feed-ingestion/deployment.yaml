@@ -29,6 +29,11 @@ spec:
             secretKeyRef:
               name: api-keys
               key: perplexity-api-key
+        - name: NEWS_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: api-keys
+              key: news-api-key
         # Disabled Reddit API keys - uncomment to enable
         # - name: REDDIT_CLIENT_ID
         #   valueFrom:
@@ -71,6 +76,11 @@ spec:
             secretKeyRef:
               name: api-keys
               key: perplexity-api-key
+        - name: NEWS_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: api-keys
+              key: news-api-key
         # Disabled Reddit API keys - uncomment to enable
         # - name: REDDIT_CLIENT_ID
         #   valueFrom:
@@ -101,6 +111,11 @@ spec:
             secretKeyRef:
               name: api-keys
               key: perplexity-api-key
+        - name: NEWS_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: api-keys
+              key: news-api-key
         # Disabled Reddit API keys - uncomment to enable
         # - name: REDDIT_CLIENT_ID
         #   valueFrom:
