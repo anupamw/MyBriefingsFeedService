@@ -348,12 +348,14 @@ async def trigger_social_ingestion(sources: Optional[List[str]] = None):
         raise HTTPException(status_code=500, detail=f"Failed to start ingestion job: {str(e)}")
 
 @app.post("/ingest/newsapi/headlines")
-async def trigger_newsapi_headlines_ingestion(
-    categories: Optional[List[str]] = None,
-    countries: Optional[List[str]] = None
-):
+async def trigger_newsapi_headlines_ingestion(request: Request):
     """Trigger NewsAPI headlines ingestion job"""
     try:
+        # Parse request body
+        body = await request.json()
+        categories = body.get("categories") if body else None
+        countries = body.get("countries") if body else None
+        
         # Submit Celery task
         task = celery_app.send_task(
             "runners.newsapi_runner.ingest_newsapi_headlines",
@@ -369,9 +371,13 @@ async def trigger_newsapi_headlines_ingestion(
         raise HTTPException(status_code=500, detail=f"Failed to start NewsAPI headlines ingestion: {str(e)}")
 
 @app.post("/ingest/newsapi/search")
-async def trigger_newsapi_search_ingestion(queries: Optional[List[str]] = None):
+async def trigger_newsapi_search_ingestion(request: Request):
     """Trigger NewsAPI search ingestion job"""
     try:
+        # Parse request body
+        body = await request.json()
+        queries = body.get("queries") if body else None
+        
         # Submit Celery task
         task = celery_app.send_task(
             "runners.newsapi_runner.ingest_newsapi_search",
