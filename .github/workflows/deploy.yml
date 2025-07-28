@@ -216,30 +216,38 @@ jobs:
           kubectl apply -f ~/k8s/namespace.yaml
           
           echo "🔐 Creating secrets from .env file..."
-          # Read API key from .env file on droplet
+          # Read API keys from .env file on droplet
           if [ -f ~/.env ]; then
             echo "✅ .env file found on droplet"
             PERPLEXITY_API_KEY=$(grep "^PERPLEXITY_API_KEY=" ~/.env | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+            NEWS_API_KEY=$(grep "^NEWS_API_KEY=" ~/.env | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+            
             if [ -n "$PERPLEXITY_API_KEY" ]; then
               echo "✅ PERPLEXITY_API_KEY found in .env (length: ${#PERPLEXITY_API_KEY})"
-              # Base64 encode for Kubernetes secret
-              ENCODED_KEY=$(echo -n "$PERPLEXITY_API_KEY" | base64)
-              echo "✅ API key encoded for Kubernetes secret"
             else
               echo "⚠️  Warning: PERPLEXITY_API_KEY not found in .env, using empty value"
-              ENCODED_KEY=""
+              PERPLEXITY_API_KEY=""
+            fi
+            
+            if [ -n "$NEWS_API_KEY" ]; then
+              echo "✅ NEWS_API_KEY found in .env (length: ${#NEWS_API_KEY})"
+            else
+              echo "⚠️  Warning: NEWS_API_KEY not found in .env, using empty value"
+              NEWS_API_KEY=""
             fi
           else
-            echo "⚠️  Warning: .env file not found on droplet, using empty value"
-            ENCODED_KEY=""
+            echo "⚠️  Warning: .env file not found on droplet, using empty values"
+            PERPLEXITY_API_KEY=""
+            NEWS_API_KEY=""
           fi
           
           # Create the api-keys secret using kubectl create
           kubectl create secret generic api-keys \
             --namespace=my-briefings \
             --from-literal=perplexity-api-key="$PERPLEXITY_API_KEY" \
+            --from-literal=news-api-key="$NEWS_API_KEY" \
             --dry-run=client -o yaml | kubectl apply -f -
-          echo "✅ Kubernetes secret 'api-keys' created/updated"
+          echo "✅ Kubernetes secret 'api-keys' created/updated with both Perplexity and NewsAPI keys"
           
           kubectl apply -f ~/k8s/deployment.yaml
           kubectl apply -f ~/k8s/service.yaml
