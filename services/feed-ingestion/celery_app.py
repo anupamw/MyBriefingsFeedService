@@ -56,6 +56,10 @@ celery_app.conf.update(
             "task": "runners.perplexity_runner.ingest_perplexity_for_all_users",
             "schedule": 21600.0,  # Every 6 hours (6 * 60 * 60 seconds)
         },
+        "ingest-newsapi-all-users": {
+            "task": "runners.newsapi_runner.ingest_newsapi_for_all_users",
+            "schedule": 21600.0,  # Every 6 hours (6 * 60 * 60 seconds)
+        },
         # Disabled runners - uncomment to enable
         # "ingest-reddit": {
         #     "task": "runners.reddit_runner.ingest_reddit",

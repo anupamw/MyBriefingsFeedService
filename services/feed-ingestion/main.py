@@ -404,6 +404,23 @@ async def trigger_newsapi_ingestion_for_user(user_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to start NewsAPI ingestion for user: {str(e)}")
 
+@app.post("/ingest/newsapi/all-users")
+async def trigger_newsapi_ingestion_all_users(background_tasks: BackgroundTasks = None):
+    """Trigger NewsAPI ingestion for all users with categories"""
+    try:
+        # Submit Celery task
+        task = celery_app.send_task(
+            "runners.newsapi_runner.ingest_newsapi_for_all_users"
+        )
+        
+        return {
+            "message": "NewsAPI ingestion for all users started",
+            "task_id": task.id,
+            "status": "pending"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start NewsAPI ingestion for all users: {str(e)}")
+
 @app.get("/feed-items", response_model=List[FeedItemResponse])
 async def get_feed_items(
     limit: int = 50,

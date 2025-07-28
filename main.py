@@ -1890,7 +1890,7 @@ async def create_user_category(
     db.commit()
     db.refresh(db_category)
     
-    # Trigger Reddit ingestion for this specific user
+    # Trigger Reddit and NewsAPI ingestion for this specific user
     try:
         print(f"[DEBUG] Triggering Reddit ingestion for user {current_user['id']} after category creation")
         reddit_response = requests.post(
@@ -1903,6 +1903,19 @@ async def create_user_category(
             print(f"[ERROR] Failed to trigger Reddit ingestion for user {current_user['id']}: {reddit_response.status_code}")
     except Exception as e:
         print(f"[ERROR] Exception triggering Reddit ingestion for user {current_user['id']}: {e}")
+    
+    try:
+        print(f"[DEBUG] Triggering NewsAPI ingestion for user {current_user['id']} after category creation")
+        newsapi_response = requests.post(
+            f"{INGESTION_SERVICE_URL}/ingest/newsapi/user/{current_user['id']}",
+            timeout=5
+        )
+        if newsapi_response.status_code == 200:
+            print(f"[DEBUG] NewsAPI ingestion for user {current_user['id']} triggered successfully")
+        else:
+            print(f"[ERROR] Failed to trigger NewsAPI ingestion for user {current_user['id']}: {newsapi_response.status_code}")
+    except Exception as e:
+        print(f"[ERROR] Exception triggering NewsAPI ingestion for user {current_user['id']}: {e}")
     
     db.close()
     return UserCategory(

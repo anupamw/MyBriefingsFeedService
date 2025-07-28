@@ -507,6 +507,89 @@ def ingest_newsapi_for_user(self, user_id: int):
         db.close()
         runner.db.close()
 
+@celery_app.task(bind=True)
+def ingest_newsapi_for_all_users(self):
+    """Trigger NewsAPI ingestion for all users with categories"""
+    from shared.models.database_models import UserCategory
+    
+    runner = NewsAPIRunner()
+    data_source = runner.get_data_source()
+    
+    if not data_source:
+        print("NewsAPI data source not found or inactive")
+        return {"error": "Data source not found"}
+    
+    db = SessionLocal()
+    
+    # Get all users with categories
+    user_categories = db.query(UserCategory).filter(
+        UserCategory.is_active == True
+    ).all()
+    
+    if not user_categories:
+        db.close()
+        return {"status": "no_users_with_categories"}
+    
+    # Group categories by user
+    users_with_categories = {}
+    for user_cat in user_categories:
+        if user_cat.user_id not in users_with_categories:
+            users_with_categories[user_cat.user_id] = []
+        users_with_categories[user_cat.user_id].append(user_cat)
+    
+    total_created = 0
+    users_processed = 0
+    
+    try:
+        for user_id, categories in users_with_categories.items():
+            # Update task progress
+            self.update_state(
+                state="PROGRESS",
+                meta={
+                    "current_user": user_id,
+                    "processed": users_processed + 1,
+                    "total": len(users_with_categories)
+                }
+            )
+            
+            for user_category in categories:
+                category_name = user_category.category_name
+                
+                # Search for news related to the user's category
+                articles = runner.search_news(query=category_name, page_size=10)
+                if articles:
+                    results = runner.save_feed_items(
+                        articles, 
+                        data_source, 
+                        {
+                            "category_name": user_category.short_summary if user_category.short_summary else category_name,
+                            "category_id": user_category.id,
+                            "user_id": user_id
+                        }
+                    )
+                    total_created += results["created"]
+                    print(f"[DEBUG] Saved {results['created']} NewsAPI articles for user {user_id}, category '{category_name}'")
+                
+                # Add delay to respect rate limits
+                time.sleep(1)
+            
+            users_processed += 1
+        
+        return {
+            "status": "completed",
+            "created": total_created,
+            "users_processed": users_processed,
+            "total_users": len(users_with_categories)
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] NewsAPI all users ingestion failed: {e}")
+        raise self.retry(countdown=60, max_retries=3)
+    
+    finally:
+        db.close()
+        runner.db.close()
+
 # Add FastAPI debug endpoint if this file is run as main or imported in a FastAPI app
 try:
     from fastapi import APIRouter
