@@ -663,7 +663,7 @@ async def debug_user_feed(user_id: int, db: SessionLocal = Depends(get_db)):
         feed_items = db.query(FeedItem).filter(FeedItem.category.in_(category_names_and_summaries)).all()
     return {
         "user_id": user_id,
-        "categories": category_names,
+        "categories": [cat.category_name for cat in user_categories],
         "feed_items": [
             {
                 "id": item.id,
