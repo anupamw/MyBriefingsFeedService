@@ -662,6 +662,7 @@ async def debug_user_feed(user_id: int, db: SessionLocal = Depends(get_db)):
                 "id": item.id,
                 "title": item.title,
                 "category": item.category,
+                "source": item.source,
                 "published_at": to_utc_z(item.published_at) if item.published_at else None
             }
             for item in feed_items
