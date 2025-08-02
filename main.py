@@ -2325,14 +2325,8 @@ async def proxy_debug_user_feed(user_id: int):
         raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
 
 @app.get("/debug/orphaned-feed-items")
-async def debug_orphaned_feed_items(
-    current_user: dict = Depends(get_current_user),
-    limit: int = 50
-):
+async def debug_orphaned_feed_items(limit: int = 50):
     """Debug endpoint to show orphaned feed items (items with categories that don't exist in user_categories)"""
-    # Check if current user is admin
-    if current_user["id"] != 1:  # Assuming user ID 1 is admin
-        raise HTTPException(status_code=403, detail="Only admin users can view orphaned feed items")
     
     db = SessionLocal()
     try:
@@ -2373,13 +2367,9 @@ async def debug_orphaned_feed_items(
 
 @app.delete("/debug/cleanup-orphaned-feed-items")
 async def cleanup_orphaned_feed_items(
-    current_user: dict = Depends(get_current_user),
     confirm: bool = Query(..., description="Must be true to confirm deletion")
 ):
     """Clean up orphaned feed items (items with categories that don't exist in user_categories)"""
-    # Check if current user is admin
-    if current_user["id"] != 1:  # Assuming user ID 1 is admin
-        raise HTTPException(status_code=403, detail="Only admin users can cleanup orphaned feed items")
     
     if not confirm:
         raise HTTPException(status_code=400, detail="Must confirm deletion with confirm=true")
@@ -2417,13 +2407,9 @@ async def cleanup_orphaned_feed_items(
 @app.delete("/debug/cleanup-old-feed-items")
 async def cleanup_old_feed_items(
     days_old: int = Query(30, description="Delete items older than this many days"),
-    current_user: dict = Depends(get_current_user),
     confirm: bool = Query(..., description="Must be true to confirm deletion")
 ):
     """Clean up old feed items based on age"""
-    # Check if current user is admin
-    if current_user["id"] != 1:  # Assuming user ID 1 is admin
-        raise HTTPException(status_code=403, detail="Only admin users can cleanup old feed items")
     
     if not confirm:
         raise HTTPException(status_code=400, detail="Must confirm deletion with confirm=true")
