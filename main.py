@@ -2194,6 +2194,149 @@ async def proxy_debug_user_feed(user_id: int):
         print(f"[ERROR] Proxy debug user feed error: {e}")
         raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
 
+@app.get("/debug/user-feed-stats/{user_id}")
+async def debug_user_feed_stats(user_id: int, current_user: dict = Depends(get_current_user)):
+    """Debug endpoint to show feed statistics for a specific user across all ingestion methods"""
+    # Check if current user is admin (user ID 1) or the requested user
+    if current_user["id"] != 1 and current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Only admin users or the user themselves can view feed stats")
+    
+    db = SessionLocal()
+    try:
+        # Import the enhanced models for proper data source tracking
+        import sys
+        import os
+        sys.path.append(os.path.join(os.path.dirname(__file__), 'shared'))
+        from models.database_models import FeedItem, DataSource
+        
+        # Get user's categories
+        user_categories = db.query(UserCategoryDB).filter(
+            UserCategoryDB.user_id == user_id
+        ).all()
+        
+        if not user_categories:
+            return {
+                "user_id": user_id,
+                "username": current_user["username"],
+                "message": "No categories found for this user",
+                "categories": [],
+                "feed_stats": {
+                    "perplexity": 0,
+                    "reddit": 0,
+                    "newsapi": 0,
+                    "total": 0
+                }
+            }
+        
+        # Get category names for this user
+        category_names = [cat.category_name for cat in user_categories]
+        
+        # Get all feed items for this user's categories with proper joins
+        feed_items = db.query(FeedItem).join(DataSource, FeedItem.data_source_id == DataSource.id).filter(
+            FeedItem.category.in_(category_names)
+        ).all()
+        
+        # Count items by data source name (proper way using metadata)
+        perplexity_count = 0
+        reddit_count = 0
+        newsapi_count = 0
+        other_count = 0
+        
+        for item in feed_items:
+            data_source_name = item.data_source.name if item.data_source else None
+            if data_source_name == "perplexity":
+                perplexity_count += 1
+            elif data_source_name == "reddit":
+                reddit_count += 1
+            elif data_source_name == "newsapi":
+                newsapi_count += 1
+            else:
+                other_count += 1
+        
+        total_count = len(feed_items)
+        
+        # Get category details with proper data source tracking
+        categories_info = []
+        for cat in user_categories:
+            # Count items for this specific category with proper joins
+            category_items = db.query(FeedItem).join(DataSource, FeedItem.data_source_id == DataSource.id).filter(
+                FeedItem.category == cat.category_name
+            ).all()
+            
+            cat_perplexity = sum(1 for item in category_items if item.data_source and item.data_source.name == "perplexity")
+            cat_reddit = sum(1 for item in category_items if item.data_source and item.data_source.name == "reddit")
+            cat_newsapi = sum(1 for item in category_items if item.data_source and item.data_source.name == "newsapi")
+            cat_other = sum(1 for item in category_items if not item.data_source or item.data_source.name not in ["perplexity", "reddit", "newsapi"])
+            
+            categories_info.append({
+                "id": cat.id,
+                "category_name": cat.category_name,
+                "short_summary": cat.short_summary,
+                "created_at": to_utc_z(cat.created_at),
+                "item_counts": {
+                    "perplexity": cat_perplexity,
+                    "reddit": cat_reddit,
+                    "newsapi": cat_newsapi,
+                    "other": cat_other,
+                    "total": len(category_items)
+                }
+            })
+        
+        # Get recent items (last 10) for each data source with proper joins
+        recent_perplexity = db.query(FeedItem).join(DataSource, FeedItem.data_source_id == DataSource.id).filter(
+            FeedItem.category.in_(category_names),
+            DataSource.name == "perplexity"
+        ).order_by(FeedItem.created_at.desc()).limit(10).all()
+        
+        recent_reddit = db.query(FeedItem).join(DataSource, FeedItem.data_source_id == DataSource.id).filter(
+            FeedItem.category.in_(category_names),
+            DataSource.name == "reddit"
+        ).order_by(FeedItem.created_at.desc()).limit(10).all()
+        
+        recent_newsapi = db.query(FeedItem).join(DataSource, FeedItem.data_source_id == DataSource.id).filter(
+            FeedItem.category.in_(category_names),
+            DataSource.name == "newsapi"
+        ).order_by(FeedItem.created_at.desc()).limit(10).all()
+        
+        def format_recent_items(items):
+            return [{
+                "id": item.id,
+                "title": item.title,
+                "source": item.source,
+                "data_source": item.data_source.name if item.data_source else None,
+                "category": item.category,
+                "created_at": to_utc_z(item.created_at),
+                "published_at": to_utc_z(item.published_at),
+                "tags": item.tags if hasattr(item, 'tags') else None,
+                "raw_data_keys": list(item.raw_data.keys()) if hasattr(item, 'raw_data') and item.raw_data else None
+            } for item in items]
+        
+        return {
+            "user_id": user_id,
+            "username": current_user["username"],
+            "total_categories": len(user_categories),
+            "categories": categories_info,
+            "feed_stats": {
+                "perplexity": perplexity_count,
+                "reddit": reddit_count,
+                "newsapi": newsapi_count,
+                "other": other_count,
+                "total": total_count
+            },
+            "recent_items": {
+                "perplexity": format_recent_items(recent_perplexity),
+                "reddit": format_recent_items(recent_reddit),
+                "newsapi": format_recent_items(recent_newsapi)
+            },
+            "generated_at": to_utc_z(datetime.utcnow())
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] Debug user feed stats error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating feed stats: {str(e)}")
+    finally:
+        db.close()
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 if __name__ == "__main__":
