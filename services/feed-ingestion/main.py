@@ -649,11 +649,18 @@ async def debug_user_feed(user_id: int, db: SessionLocal = Depends(get_db)):
     """Debug endpoint: show user categories and feed items for a user"""
     # Get user categories
     user_categories = db.query(UserCategory).filter(UserCategory.user_id == user_id).all()
-    category_names = [cat.category_name for cat in user_categories]
-    # Get feed items for those categories
+    
+    # Get category names and short summaries for this user
+    category_names_and_summaries = []
+    for cat in user_categories:
+        category_names_and_summaries.append(cat.category_name)
+        if cat.short_summary:
+            category_names_and_summaries.append(cat.short_summary)
+    
+    # Get feed items for those categories (include both category_name and short_summary)
     feed_items = []
-    if category_names:
-        feed_items = db.query(FeedItem).filter(FeedItem.category.in_(category_names)).all()
+    if category_names_and_summaries:
+        feed_items = db.query(FeedItem).filter(FeedItem.category.in_(category_names_and_summaries)).all()
     return {
         "user_id": user_id,
         "categories": category_names,
