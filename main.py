@@ -2195,11 +2195,8 @@ async def proxy_debug_user_feed(user_id: int):
         raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
 
 @app.get("/debug/user-feed-stats/{user_id}")
-async def debug_user_feed_stats(user_id: int, current_user: dict = Depends(get_current_user)):
+async def debug_user_feed_stats(user_id: int):
     """Debug endpoint to show feed statistics for a specific user across all ingestion methods"""
-    # Check if current user is admin (user ID 1) or the requested user
-    if current_user["id"] != 1 and current_user["id"] != user_id:
-        raise HTTPException(status_code=403, detail="Only admin users or the user themselves can view feed stats")
     
     db = SessionLocal()
     try:
@@ -2217,7 +2214,6 @@ async def debug_user_feed_stats(user_id: int, current_user: dict = Depends(get_c
         if not user_categories:
             return {
                 "user_id": user_id,
-                "username": current_user["username"],
                 "message": "No categories found for this user",
                 "categories": [],
                 "feed_stats": {
@@ -2313,7 +2309,6 @@ async def debug_user_feed_stats(user_id: int, current_user: dict = Depends(get_c
         
         return {
             "user_id": user_id,
-            "username": current_user["username"],
             "total_categories": len(user_categories),
             "categories": categories_info,
             "feed_stats": {
