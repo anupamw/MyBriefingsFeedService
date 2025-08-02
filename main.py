@@ -2176,6 +2176,135 @@ async def proxy_task_status(task_id: str):
         print(f"[ERROR] Proxy task status error: {e}")
         raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
 
+@app.get("/debug/user-feed-stats/{user_id}")
+async def debug_user_feed_stats(user_id: int):
+    """Debug endpoint to show feed statistics for a specific user across all ingestion methods"""
+    
+    db = SessionLocal()
+    try:
+        # Get user's categories
+        user_categories = db.query(UserCategoryDB).filter(
+            UserCategoryDB.user_id == user_id
+        ).all()
+        
+        if not user_categories:
+            return {
+                "user_id": user_id,
+                "message": "No categories found for this user",
+                "categories": [],
+                "feed_stats": {
+                    "perplexity": 0,
+                    "reddit": 0,
+                    "newsapi": 0,
+                    "total": 0
+                }
+            }
+        
+        # Get category names for this user
+        category_names = [cat.category_name for cat in user_categories]
+        
+        # Get all feed items for this user's categories using current schema
+        feed_items = db.query(FeedItemDB).filter(
+            FeedItemDB.category.in_(category_names)
+        ).all()
+        
+        # Count items by source field (fallback method for current schema)
+        perplexity_count = 0
+        reddit_count = 0
+        newsapi_count = 0
+        other_count = 0
+        
+        for item in feed_items:
+            source = item.source or ""
+            if source == "Perplexity AI":
+                perplexity_count += 1
+            elif source.startswith("Reddit r/"):
+                reddit_count += 1
+            elif source.startswith("NewsAPI -"):
+                newsapi_count += 1
+            else:
+                other_count += 1
+        
+        total_count = len(feed_items)
+        
+        # Get category details
+        categories_info = []
+        for cat in user_categories:
+            # Count items for this specific category
+            category_items = db.query(FeedItemDB).filter(
+                FeedItemDB.category == cat.category_name
+            ).all()
+            
+            cat_perplexity = sum(1 for item in category_items if item.source == "Perplexity AI")
+            cat_reddit = sum(1 for item in category_items if item.source and item.source.startswith("Reddit r/"))
+            cat_newsapi = sum(1 for item in category_items if item.source and item.source.startswith("NewsAPI -"))
+            cat_other = sum(1 for item in category_items if item.source not in ["Perplexity AI"] and not (item.source and item.source.startswith("Reddit r/")) and not (item.source and item.source.startswith("NewsAPI -")))
+            
+            categories_info.append({
+                "id": cat.id,
+                "category_name": cat.category_name,
+                "short_summary": cat.short_summary,
+                "created_at": to_utc_z(cat.created_at),
+                "item_counts": {
+                    "perplexity": cat_perplexity,
+                    "reddit": cat_reddit,
+                    "newsapi": cat_newsapi,
+                    "other": cat_other,
+                    "total": len(category_items)
+                }
+            })
+        
+        # Get recent items (last 10) for each source
+        recent_perplexity = db.query(FeedItemDB).filter(
+            FeedItemDB.category.in_(category_names),
+            FeedItemDB.source == "Perplexity AI"
+        ).order_by(FeedItemDB.created_at.desc()).limit(10).all()
+        
+        recent_reddit = db.query(FeedItemDB).filter(
+            FeedItemDB.category.in_(category_names),
+            FeedItemDB.source.like('Reddit r/%')
+        ).order_by(FeedItemDB.created_at.desc()).limit(10).all()
+        
+        recent_newsapi = db.query(FeedItemDB).filter(
+            FeedItemDB.category.in_(category_names),
+            FeedItemDB.source.like('NewsAPI -%')
+        ).order_by(FeedItemDB.created_at.desc()).limit(10).all()
+        
+        def format_recent_items(items):
+            return [{
+                "id": item.id,
+                "title": item.title,
+                "source": item.source,
+                "category": item.category,
+                "created_at": to_utc_z(item.created_at),
+                "published_at": to_utc_z(item.published_at)
+            } for item in items]
+        
+        return {
+            "user_id": user_id,
+            "total_categories": len(user_categories),
+            "categories": categories_info,
+            "feed_stats": {
+                "perplexity": perplexity_count,
+                "reddit": reddit_count,
+                "newsapi": newsapi_count,
+                "other": other_count,
+                "total": total_count
+            },
+            "recent_items": {
+                "perplexity": format_recent_items(recent_perplexity),
+                "reddit": format_recent_items(recent_reddit),
+                "newsapi": format_recent_items(recent_newsapi)
+            },
+            "generated_at": to_utc_z(datetime.utcnow())
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] Debug user feed stats error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating feed stats: {str(e)}")
+    finally:
+        db.close()
+
 @app.get("/api/ingestion/debug/user-feed/{user_id}")
 async def proxy_debug_user_feed(user_id: int):
     """Proxy endpoint to forward debug user feed requests to ingestion service"""
