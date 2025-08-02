@@ -1483,6 +1483,7 @@ async def root():
             }
 
 
+
         </script>
     </body>
     </html>
@@ -2322,6 +2323,142 @@ async def proxy_debug_user_feed(user_id: int):
     except Exception as e:
         print(f"[ERROR] Proxy debug user feed error: {e}")
         raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
+
+@app.get("/debug/orphaned-feed-items")
+async def debug_orphaned_feed_items(
+    current_user: dict = Depends(get_current_user),
+    limit: int = 50
+):
+    """Debug endpoint to show orphaned feed items (items with categories that don't exist in user_categories)"""
+    # Check if current user is admin
+    if current_user["id"] != 1:  # Assuming user ID 1 is admin
+        raise HTTPException(status_code=403, detail="Only admin users can view orphaned feed items")
+    
+    db = SessionLocal()
+    try:
+        # Get orphaned feed items
+        orphaned_items = db.query(FeedItemDB).filter(
+            ~FeedItemDB.category.in_(
+                db.query(UserCategoryDB.category_name)
+            )
+        ).order_by(FeedItemDB.created_at.desc()).limit(limit).all()
+        
+        # Group by category for summary
+        category_summary = {}
+        for item in orphaned_items:
+            if item.category not in category_summary:
+                category_summary[item.category] = 0
+            category_summary[item.category] += 1
+        
+        return {
+            "total_orphaned_items": len(orphaned_items),
+            "category_summary": category_summary,
+            "orphaned_items": [
+                {
+                    "id": item.id,
+                    "title": item.title,
+                    "category": item.category,
+                    "source": item.source,
+                    "created_at": to_utc_z(item.created_at),
+                    "published_at": to_utc_z(item.published_at)
+                }
+                for item in orphaned_items
+            ]
+        }
+    except Exception as e:
+        print(f"[ERROR] Debug orphaned feed items error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting orphaned feed items: {str(e)}")
+    finally:
+        db.close()
+
+@app.delete("/debug/cleanup-orphaned-feed-items")
+async def cleanup_orphaned_feed_items(
+    current_user: dict = Depends(get_current_user),
+    confirm: bool = Query(..., description="Must be true to confirm deletion")
+):
+    """Clean up orphaned feed items (items with categories that don't exist in user_categories)"""
+    # Check if current user is admin
+    if current_user["id"] != 1:  # Assuming user ID 1 is admin
+        raise HTTPException(status_code=403, detail="Only admin users can cleanup orphaned feed items")
+    
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Must confirm deletion with confirm=true")
+    
+    db = SessionLocal()
+    try:
+        # Count orphaned items before deletion
+        orphaned_count = db.query(FeedItemDB).filter(
+            ~FeedItemDB.category.in_(
+                db.query(UserCategoryDB.category_name)
+            )
+        ).count()
+        
+        # Delete orphaned feed items
+        deleted_count = db.query(FeedItemDB).filter(
+            ~FeedItemDB.category.in_(
+                db.query(UserCategoryDB.category_name)
+            )
+        ).delete()
+        
+        db.commit()
+        
+        return {
+            "message": f"Successfully cleaned up {deleted_count} orphaned feed items",
+            "orphaned_items_deleted": deleted_count,
+            "total_orphaned_items_found": orphaned_count
+        }
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] Cleanup orphaned feed items error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error cleaning up orphaned feed items: {str(e)}")
+    finally:
+        db.close()
+
+@app.delete("/debug/cleanup-old-feed-items")
+async def cleanup_old_feed_items(
+    days_old: int = Query(30, description="Delete items older than this many days"),
+    current_user: dict = Depends(get_current_user),
+    confirm: bool = Query(..., description="Must be true to confirm deletion")
+):
+    """Clean up old feed items based on age"""
+    # Check if current user is admin
+    if current_user["id"] != 1:  # Assuming user ID 1 is admin
+        raise HTTPException(status_code=403, detail="Only admin users can cleanup old feed items")
+    
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Must confirm deletion with confirm=true")
+    
+    if days_old < 1:
+        raise HTTPException(status_code=400, detail="days_old must be at least 1")
+    
+    db = SessionLocal()
+    try:
+        cutoff_date = datetime.utcnow() - timedelta(days=days_old)
+        
+        # Count old items before deletion
+        old_count = db.query(FeedItemDB).filter(
+            FeedItemDB.created_at < cutoff_date
+        ).count()
+        
+        # Delete old feed items
+        deleted_count = db.query(FeedItemDB).filter(
+            FeedItemDB.created_at < cutoff_date
+        ).delete()
+        
+        db.commit()
+        
+        return {
+            "message": f"Successfully cleaned up {deleted_count} feed items older than {days_old} days",
+            "old_items_deleted": deleted_count,
+            "total_old_items_found": old_count,
+            "cutoff_date": to_utc_z(cutoff_date)
+        }
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] Cleanup old feed items error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error cleaning up old feed items: {str(e)}")
+    finally:
+        db.close()
 
 @app.get("/debug/user-feed-stats/{user_id}")
 async def debug_user_feed_stats(user_id: int):
