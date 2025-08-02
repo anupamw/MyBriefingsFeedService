@@ -2200,12 +2200,6 @@ async def debug_user_feed_stats(user_id: int):
     
     db = SessionLocal()
     try:
-        # Import the enhanced models for proper data source tracking
-        import sys
-        import os
-        sys.path.append(os.path.join(os.path.dirname(__file__), 'shared'))
-        from models.database_models import FeedItem, DataSource
-        
         # Get user's categories
         user_categories = db.query(UserCategoryDB).filter(
             UserCategoryDB.user_id == user_id
@@ -2227,42 +2221,42 @@ async def debug_user_feed_stats(user_id: int):
         # Get category names for this user
         category_names = [cat.category_name for cat in user_categories]
         
-        # Get all feed items for this user's categories with proper joins
-        feed_items = db.query(FeedItem).join(DataSource, FeedItem.data_source_id == DataSource.id).filter(
-            FeedItem.category.in_(category_names)
+        # Get all feed items for this user's categories using current schema
+        feed_items = db.query(FeedItemDB).filter(
+            FeedItemDB.category.in_(category_names)
         ).all()
         
-        # Count items by data source name (proper way using metadata)
+        # Count items by source field (fallback method for current schema)
         perplexity_count = 0
         reddit_count = 0
         newsapi_count = 0
         other_count = 0
         
         for item in feed_items:
-            data_source_name = item.data_source.name if item.data_source else None
-            if data_source_name == "perplexity":
+            source = item.source or ""
+            if source == "Perplexity AI":
                 perplexity_count += 1
-            elif data_source_name == "reddit":
+            elif source.startswith("Reddit r/"):
                 reddit_count += 1
-            elif data_source_name == "newsapi":
+            elif source.startswith("NewsAPI -"):
                 newsapi_count += 1
             else:
                 other_count += 1
         
         total_count = len(feed_items)
         
-        # Get category details with proper data source tracking
+        # Get category details
         categories_info = []
         for cat in user_categories:
-            # Count items for this specific category with proper joins
-            category_items = db.query(FeedItem).join(DataSource, FeedItem.data_source_id == DataSource.id).filter(
-                FeedItem.category == cat.category_name
+            # Count items for this specific category
+            category_items = db.query(FeedItemDB).filter(
+                FeedItemDB.category == cat.category_name
             ).all()
             
-            cat_perplexity = sum(1 for item in category_items if item.data_source and item.data_source.name == "perplexity")
-            cat_reddit = sum(1 for item in category_items if item.data_source and item.data_source.name == "reddit")
-            cat_newsapi = sum(1 for item in category_items if item.data_source and item.data_source.name == "newsapi")
-            cat_other = sum(1 for item in category_items if not item.data_source or item.data_source.name not in ["perplexity", "reddit", "newsapi"])
+            cat_perplexity = sum(1 for item in category_items if item.source == "Perplexity AI")
+            cat_reddit = sum(1 for item in category_items if item.source and item.source.startswith("Reddit r/"))
+            cat_newsapi = sum(1 for item in category_items if item.source and item.source.startswith("NewsAPI -"))
+            cat_other = sum(1 for item in category_items if item.source not in ["Perplexity AI"] and not (item.source and item.source.startswith("Reddit r/")) and not (item.source and item.source.startswith("NewsAPI -")))
             
             categories_info.append({
                 "id": cat.id,
@@ -2278,33 +2272,30 @@ async def debug_user_feed_stats(user_id: int):
                 }
             })
         
-        # Get recent items (last 10) for each data source with proper joins
-        recent_perplexity = db.query(FeedItem).join(DataSource, FeedItem.data_source_id == DataSource.id).filter(
-            FeedItem.category.in_(category_names),
-            DataSource.name == "perplexity"
-        ).order_by(FeedItem.created_at.desc()).limit(10).all()
+        # Get recent items (last 10) for each source
+        recent_perplexity = db.query(FeedItemDB).filter(
+            FeedItemDB.category.in_(category_names),
+            FeedItemDB.source == "Perplexity AI"
+        ).order_by(FeedItemDB.created_at.desc()).limit(10).all()
         
-        recent_reddit = db.query(FeedItem).join(DataSource, FeedItem.data_source_id == DataSource.id).filter(
-            FeedItem.category.in_(category_names),
-            DataSource.name == "reddit"
-        ).order_by(FeedItem.created_at.desc()).limit(10).all()
+        recent_reddit = db.query(FeedItemDB).filter(
+            FeedItemDB.category.in_(category_names),
+            FeedItemDB.source.like('Reddit r/%')
+        ).order_by(FeedItemDB.created_at.desc()).limit(10).all()
         
-        recent_newsapi = db.query(FeedItem).join(DataSource, FeedItem.data_source_id == DataSource.id).filter(
-            FeedItem.category.in_(category_names),
-            DataSource.name == "newsapi"
-        ).order_by(FeedItem.created_at.desc()).limit(10).all()
+        recent_newsapi = db.query(FeedItemDB).filter(
+            FeedItemDB.category.in_(category_names),
+            FeedItemDB.source.like('NewsAPI -%')
+        ).order_by(FeedItemDB.created_at.desc()).limit(10).all()
         
         def format_recent_items(items):
             return [{
                 "id": item.id,
                 "title": item.title,
                 "source": item.source,
-                "data_source": item.data_source.name if item.data_source else None,
                 "category": item.category,
                 "created_at": to_utc_z(item.created_at),
-                "published_at": to_utc_z(item.published_at),
-                "tags": item.tags if hasattr(item, 'tags') else None,
-                "raw_data_keys": list(item.raw_data.keys()) if hasattr(item, 'raw_data') and item.raw_data else None
+                "published_at": to_utc_z(item.published_at)
             } for item in items]
         
         return {
