@@ -260,6 +260,8 @@ class NewsAPIRunner:
         
         return None
     
+
+    
     def save_feed_items(self, articles: List[Dict], data_source: DataSource, category_info: Dict[str, Any] = None) -> Dict[str, int]:
         """Save NewsAPI articles as feed items"""
         created = 0
@@ -271,7 +273,12 @@ class NewsAPIRunner:
         
         print(f"[DEBUG] Starting to save {len(articles)} NewsAPI articles for category '{category_name}'")
         
-        for article in articles:
+        # Use all articles for now - let the user decide relevance
+        # The short_summary should already provide better search results
+        filtered_articles = articles
+        print(f"[DEBUG] Using {len(filtered_articles)} articles for category '{category_name}'")
+        
+        for article in filtered_articles:
             try:
                 # Extract image URL
                 image_url = self.extract_image_url(article)
@@ -474,7 +481,7 @@ def ingest_newsapi_for_user(self, user_id: int):
         for user_category in user_categories:
             category_name = user_category.category_name
             
-            # Use short_summary for better search results, fallback to category_name
+            # Use short_summary for NewsAPI search query, fallback to category_name
             search_query = user_category.short_summary if user_category.short_summary else category_name
             
             # Search for news related to the user's category
@@ -484,7 +491,7 @@ def ingest_newsapi_for_user(self, user_id: int):
                     articles, 
                     data_source, 
                     {
-                        "category_name": user_category.short_summary if user_category.short_summary else category_name,
+                        "category_name": category_name,
                         "category_id": user_category.id,
                         "user_id": user_id
                     }
@@ -558,14 +565,17 @@ def ingest_newsapi_for_all_users(self):
             for user_category in categories:
                 category_name = user_category.category_name
                 
+                # Use short_summary for NewsAPI search query, fallback to category_name
+                search_query = user_category.short_summary if user_category.short_summary else category_name
+                
                 # Search for news related to the user's category
-                articles = runner.search_news(query=category_name, page_size=10)
+                articles = runner.search_news(query=search_query, page_size=10)
                 if articles:
                     results = runner.save_feed_items(
                         articles, 
                         data_source, 
                         {
-                            "category_name": user_category.short_summary if user_category.short_summary else category_name,
+                            "category_name": category_name,
                             "category_id": user_category.id,
                             "user_id": user_id
                         }
