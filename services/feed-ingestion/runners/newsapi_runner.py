@@ -481,11 +481,8 @@ def ingest_newsapi_for_user(self, user_id: int):
         for user_category in user_categories:
             category_name = user_category.category_name
             
-            # Use short_summary for NewsAPI search query, fallback to category_name
-            search_query = user_category.short_summary if user_category.short_summary else category_name
-            
             # Search for news related to the user's category
-            articles = runner.search_news(query=search_query, page_size=15)
+            articles = runner.search_news(query=category_name, page_size=15)
             if articles:
                 results = runner.save_feed_items(
                     articles, 
@@ -565,11 +562,8 @@ def ingest_newsapi_for_all_users(self):
             for user_category in categories:
                 category_name = user_category.category_name
                 
-                # Use short_summary for NewsAPI search query, fallback to category_name
-                search_query = user_category.short_summary if user_category.short_summary else category_name
-                
                 # Search for news related to the user's category
-                articles = runner.search_news(query=search_query, page_size=10)
+                articles = runner.search_news(query=category_name, page_size=10)
                 if articles:
                     results = runner.save_feed_items(
                         articles, 
