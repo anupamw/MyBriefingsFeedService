@@ -270,13 +270,54 @@ class NewsAPIRunner:
         category_name = category_info.get("category_name", "General News") if category_info else "General News"
         category_id = category_info.get("category_id") if category_info else None
         user_id = category_info.get("user_id") if category_info else None
+        short_summary = category_info.get("short_summary", category_name) if category_info else category_name
         
         print(f"[DEBUG] Starting to save {len(articles)} NewsAPI articles for category '{category_name}'")
         
-        # Use all articles for now - let the user decide relevance
-        # The short_summary should already provide better search results
-        filtered_articles = articles
-        print(f"[DEBUG] Using {len(filtered_articles)} articles for category '{category_name}'")
+        # Check if post-processing is enabled for NewsAPI
+        enable_post_processing = os.getenv("ENABLE_POST_PROCESSING_NEWSAPI", "false").lower() == "true"
+        
+        if enable_post_processing and articles:
+            print(f"[DEBUG] Post-processing enabled for NewsAPI, filtering {len(articles)} articles")
+            
+            # Prepare articles for filtering
+            articles_for_filtering = []
+            for i, article in enumerate(articles, 1):
+                articles_for_filtering.append({
+                    'item_number': i,
+                    'title': article.get('title', ''),
+                    'summary': article.get('description', ''),
+                    'content': article.get('content', ''),
+                    'source': f"NewsAPI - {article.get('source', {}).get('name', 'Unknown')}"
+                })
+            
+            # Apply post-processing filtering
+            try:
+                from services.feed_ingestion.utils.feed_filter import feed_filter
+                filter_result = feed_filter.filter_feed_items(category_name, short_summary, articles_for_filtering)
+                
+                if filter_result['success']:
+                    # Use only filtered articles
+                    filtered_articles = filter_result['filtered_items']
+                    print(f"[DEBUG] Post-processing completed: {len(articles)} -> {len(filtered_articles)} articles kept")
+                    
+                    # Log filtering stats
+                    if hasattr(self, 'filtering_stats'):
+                        self.filtering_stats['newsapi'] = {
+                            'total': len(articles),
+                            'kept': len(filtered_articles),
+                            'filtered': len(articles) - len(filtered_articles)
+                        }
+                else:
+                    print(f"[WARNING] Post-processing failed: {filter_result.get('error', 'Unknown error')}, using all articles")
+                    filtered_articles = articles
+            except Exception as e:
+                print(f"[ERROR] Post-processing error: {e}, using all articles")
+                filtered_articles = articles
+        else:
+            # No post-processing, use all articles
+            filtered_articles = articles
+            print(f"[DEBUG] Post-processing disabled for NewsAPI, using all {len(filtered_articles)} articles")
         
         for article in filtered_articles:
             try:

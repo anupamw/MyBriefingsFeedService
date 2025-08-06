@@ -349,9 +349,57 @@ class PerplexityRunner:
         category_name = category_info.get("category_name", "General") if category_info else "General"
         category_id = category_info.get("category_id") if category_info else None
         user_id = category_info.get("user_id") if category_info else None
+        short_summary = category_info.get("short_summary", category_name) if category_info else category_name
+        
+        print(f"[DEBUG] Starting to save {len(content_items)} Perplexity articles for category '{category_name}'")
+        
+        # Check if post-processing is enabled for Perplexity
+        enable_post_processing = os.getenv("ENABLE_POST_PROCESSING_PERPLEXITY", "false").lower() == "true"
+        
+        if enable_post_processing and content_items:
+            print(f"[DEBUG] Post-processing enabled for Perplexity, filtering {len(content_items)} articles")
+            
+            # Prepare articles for filtering
+            articles_for_filtering = []
+            for i, item in enumerate(content_items, 1):
+                articles_for_filtering.append({
+                    'item_number': i,
+                    'title': item.get('title', ''),
+                    'summary': item.get('summary', ''),
+                    'content': item.get('content', ''),
+                    'source': 'Perplexity AI'
+                })
+            
+            # Apply post-processing filtering
+            try:
+                from services.feed_ingestion.utils.feed_filter import feed_filter
+                filter_result = feed_filter.filter_feed_items(category_name, short_summary, articles_for_filtering)
+                
+                if filter_result['success']:
+                    # Use only filtered articles
+                    filtered_items = filter_result['filtered_items']
+                    print(f"[DEBUG] Post-processing completed: {len(content_items)} -> {len(filtered_items)} articles kept")
+                    
+                    # Log filtering stats
+                    if hasattr(self, 'filtering_stats'):
+                        self.filtering_stats['perplexity'] = {
+                            'total': len(content_items),
+                            'kept': len(filtered_items),
+                            'filtered': len(content_items) - len(filtered_items)
+                        }
+                else:
+                    print(f"[WARNING] Post-processing failed: {filter_result.get('error', 'Unknown error')}, using all articles")
+                    filtered_items = content_items
+            except Exception as e:
+                print(f"[ERROR] Post-processing error: {e}, using all articles")
+                filtered_items = content_items
+        else:
+            # No post-processing, use all articles
+            filtered_items = content_items
+            print(f"[DEBUG] Post-processing disabled for Perplexity, using all {len(filtered_items)} articles")
         
         # Delete ALL existing items for this category before inserting new ones
-        if content_items:
+        if filtered_items:
             try:
                 # Delete all items for this category (not just old ones)
                 deleted_count = self.db.query(FeedItem).filter(
@@ -361,7 +409,7 @@ class PerplexityRunner:
             except Exception as e:
                 print(f"Error deleting existing items for category {category_name}: {e}")
         
-        for item in content_items:
+        for item in filtered_items:
             try:
                 # Create new item with category association
                 feed_item = FeedItem(

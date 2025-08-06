@@ -2575,6 +2575,88 @@ async def debug_user_feed_stats(user_id: int):
     finally:
         db.close()
 
+@app.get("/debug/filtering-stats/{user_id}")
+async def debug_filtering_stats(user_id: int):
+    """Debug endpoint to show filtering statistics for a user (no auth required)"""
+    db = SessionLocal()
+    try:
+        # Get user categories
+        user_categories = db.query(UserCategoryDB).filter(UserCategoryDB.user_id == user_id).all()
+        
+        if not user_categories:
+            return {
+                "user_id": user_id,
+                "message": "No categories found for this user",
+                "filtering_stats": {}
+            }
+        
+        # Get category names
+        category_names = [cat.category_name for cat in user_categories]
+        
+        # Get all feed items for this user's categories
+        feed_items = db.query(FeedItemDB).filter(FeedItemDB.category.in_(category_names)).all()
+        
+        # Calculate filtering stats
+        total_items = len(feed_items)
+        source_breakdown = {}
+        category_breakdown = {}
+        
+        for item in feed_items:
+            source = item.source or "Unknown"
+            category = item.category
+            
+            # Initialize source breakdown
+            if source not in source_breakdown:
+                source_breakdown[source] = {
+                    "total": 0,
+                    "kept": 0,
+                    "filtered": 0
+                }
+            source_breakdown[source]["total"] += 1
+            source_breakdown[source]["kept"] += 1  # All items in DB are "kept"
+            
+            # Initialize category breakdown
+            if category not in category_breakdown:
+                category_breakdown[category] = {
+                    "total": 0,
+                    "kept": 0,
+                    "filtered": 0
+                }
+            category_breakdown[category]["total"] += 1
+            category_breakdown[category]["kept"] += 1
+        
+        # Calculate filtering rates
+        for source in source_breakdown:
+            total = source_breakdown[source]["total"]
+            kept = source_breakdown[source]["kept"]
+            filtered = source_breakdown[source]["filtered"]
+            source_breakdown[source]["filtering_rate"] = round((filtered / total * 100) if total > 0 else 0, 1)
+        
+        for category in category_breakdown:
+            total = category_breakdown[category]["total"]
+            kept = category_breakdown[category]["kept"]
+            filtered = category_breakdown[category]["filtered"]
+            category_breakdown[category]["filtering_rate"] = round((filtered / total * 100) if total > 0 else 0, 1)
+        
+        return {
+            "user_id": user_id,
+            "filtering_stats": {
+                "total_items_processed": total_items,
+                "items_kept": total_items,  # All items in DB are "kept"
+                "items_filtered_out": 0,  # We don't track filtered items in DB
+                "filtering_rate": 0.0
+            },
+            "source_breakdown": source_breakdown,
+            "category_breakdown": category_breakdown,
+            "note": "Filtering stats are calculated based on items currently in database. Filtered items are not stored."
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] Debug filtering stats error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error getting filtering stats: {str(e)}")
+    finally:
+        db.close()
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 if __name__ == "__main__":
