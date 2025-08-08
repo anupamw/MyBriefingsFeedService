@@ -1,7 +1,11 @@
 import json
 import os
+import sys
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+
+# Add parent directory to Python path for imports
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../'))
 
 class FeedItemFilter:
     """Filter feed items for relevance using Perplexity AI"""
@@ -13,7 +17,7 @@ class FeedItemFilter:
     def _init_perplexity_client(self):
         """Initialize Perplexity client"""
         try:
-            from services.feed_ingestion.runners.perplexity_runner import PerplexityRunner
+            from runners.perplexity_runner import PerplexityRunner
             self.perplexity_client = PerplexityRunner()
         except Exception as e:
             print(f"[ERROR] Failed to initialize Perplexity client: {e}")
