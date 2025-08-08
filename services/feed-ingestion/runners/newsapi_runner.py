@@ -294,7 +294,7 @@ class NewsAPIRunner:
             # Apply post-processing filtering
             try:
                 print(f"[DEBUG] newsapi_runner: Attempting to import feed_filter")
-                from services.feed_ingestion.utils.feed_filter import feed_filter
+                from utils.feed_filter import feed_filter
                 print(f"[DEBUG] newsapi_runner: Successfully imported feed_filter")
                 filter_result = feed_filter.filter_feed_items(category_name, short_summary, articles_for_filtering)
                 
