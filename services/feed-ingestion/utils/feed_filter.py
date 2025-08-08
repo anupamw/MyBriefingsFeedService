@@ -4,8 +4,19 @@ import sys
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-# Import shared components - same pattern as runners
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../../'))
+# Add debugging for import paths
+print(f"[DEBUG] feed_filter.py: Current working directory: {os.getcwd()}")
+print(f"[DEBUG] feed_filter.py: __file__: {__file__}")
+print(f"[DEBUG] feed_filter.py: Current sys.path: {sys.path}")
+
+# Add the current directory's parent to Python path for relative imports
+current_dir = os.path.dirname(__file__)
+parent_dir = os.path.dirname(current_dir)
+print(f"[DEBUG] feed_filter.py: current_dir: {current_dir}")
+print(f"[DEBUG] feed_filter.py: parent_dir: {parent_dir}")
+
+sys.path.insert(0, parent_dir)
+print(f"[DEBUG] feed_filter.py: Updated sys.path: {sys.path}")
 
 class FeedItemFilter:
     """Filter feed items for relevance using Perplexity AI"""
@@ -16,11 +27,21 @@ class FeedItemFilter:
     
     def _init_perplexity_client(self):
         """Initialize Perplexity client"""
+        print(f"[DEBUG] feed_filter.py: Starting _init_perplexity_client")
         try:
-            from services.feed_ingestion.runners.perplexity_runner import PerplexityRunner
+            # Use relative import from the parent directory
+            print(f"[DEBUG] feed_filter.py: Attempting to import PerplexityRunner")
+            from runners.perplexity_runner import PerplexityRunner
+            print(f"[DEBUG] feed_filter.py: Successfully imported PerplexityRunner")
             self.perplexity_client = PerplexityRunner()
+            print(f"[DEBUG] feed_filter.py: Successfully created PerplexityRunner instance")
+        except ImportError as e:
+            print(f"[ERROR] feed_filter.py: ImportError: {e}")
+            print(f"[DEBUG] feed_filter.py: sys.path at error: {sys.path}")
+            self.perplexity_client = None
         except Exception as e:
-            print(f"[ERROR] Failed to initialize Perplexity client: {e}")
+            print(f"[ERROR] feed_filter.py: Failed to initialize Perplexity client: {e}")
+            print(f"[DEBUG] feed_filter.py: Exception type: {type(e)}")
             self.perplexity_client = None
     
     def create_filtering_prompt(self, category_name: str, short_summary: str, feed_items: List[Dict]) -> str:
