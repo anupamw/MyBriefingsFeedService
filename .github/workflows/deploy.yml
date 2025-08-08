@@ -33,13 +33,29 @@ jobs:
       run: |
         echo "🔍 Validating Python imports..."
         
+        # Debug: Check directory structure
+        echo "📁 Checking directory structure..."
+        ls -la
+        echo "📁 Checking services directory..."
+        ls -la services/ || echo "No services directory found"
+        echo "📁 Checking services/feed-ingestion directory..."
+        ls -la services/feed-ingestion/ || echo "No feed-ingestion directory found"
+        
         # Test ingestion service imports
         echo "Testing ingestion service imports..."
         python -c "
         import sys
         import os
-        sys.path.append('.')
-        sys.path.append('./services/feed-ingestion')
+        
+        # Add the correct paths
+        current_dir = os.getcwd()
+        print(f'Current directory: {current_dir}')
+        
+        # Add project root and services directory to Python path
+        sys.path.insert(0, current_dir)
+        sys.path.insert(0, os.path.join(current_dir, 'services', 'feed-ingestion'))
+        
+        print(f'Python path: {sys.path}')
         
         # Test basic imports
         try:
