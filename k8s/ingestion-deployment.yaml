@@ -31,6 +31,10 @@ spec:
             secretKeyRef:
               name: api-secrets
               key: perplexity-api-key
+        - name: ENABLE_POST_PROCESSING_NEWSAPI
+          value: "true"
+        - name: ENABLE_POST_PROCESSING_PERPLEXITY
+          value: "true"
         resources:
           requests:
             memory: "256Mi"

@@ -36,6 +36,10 @@ spec:
               key: news-api-key
         - name: PYTHONPATH
           value: "/app:/app/shared"
+        - name: ENABLE_POST_PROCESSING_NEWSAPI
+          value: "true"
+        - name: ENABLE_POST_PROCESSING_PERPLEXITY
+          value: "true"
         resources:
           requests:
             memory: "256Mi"
