@@ -144,9 +144,9 @@ IMPORTANT:
             prompt = self.create_filtering_prompt(category_name, short_summary, feed_items)
             
             # Call Perplexity API
-            response = self.perplexity_client.query(prompt)
+            response = self.perplexity_client.query_perplexity(prompt)
             
-            if not response or not response.get('answer'):
+            if not response or not response.get('choices'):
                 print("[ERROR] No response from Perplexity")
                 return {
                     "success": False,
@@ -155,12 +155,26 @@ IMPORTANT:
                     "evaluations": []
                 }
             
+            # Extract the content from the response
+            content = ""
+            if response.get('choices') and len(response['choices']) > 0:
+                content = response['choices'][0]['message']['content']
+            
+            if not content:
+                print("[ERROR] No content in Perplexity response")
+                return {
+                    "success": False,
+                    "error": "No content in Perplexity response",
+                    "filtered_items": feed_items,
+                    "evaluations": []
+                }
+            
             # Parse the JSON response
             try:
-                result = json.loads(response['answer'])
+                result = json.loads(content)
             except json.JSONDecodeError as e:
                 print(f"[ERROR] Failed to parse Perplexity response as JSON: {e}")
-                print(f"[ERROR] Response: {response['answer']}")
+                print(f"[ERROR] Response: {content}")
                 return {
                     "success": False,
                     "error": f"Invalid JSON response: {e}",
