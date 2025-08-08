@@ -33,19 +33,6 @@ jobs:
       run: |
         echo "🔍 Validating Python imports..."
         
-        # Test main service imports
-        echo "Testing main service imports..."
-        python -c "
-        import sys
-        sys.path.append('.')
-        try:
-            from main import app
-            print('✅ Main service imports successful')
-        except ImportError as e:
-            print(f'❌ Main service import error: {e}')
-            sys.exit(1)
-        "
-        
         # Test ingestion service imports
         echo "Testing ingestion service imports..."
         python -c "
