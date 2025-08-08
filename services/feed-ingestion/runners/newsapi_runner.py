@@ -313,6 +313,11 @@ class NewsAPIRunner:
                 else:
                     print(f"[WARNING] Post-processing failed: {filter_result.get('error', 'Unknown error')}, using all articles")
                     filtered_articles = articles
+            except ImportError as e:
+                print(f"[ERROR] Post-processing ImportError: {e}")
+                print(f"[DEBUG] newsapi_runner: ImportError type: {type(e)}")
+                print(f"[DEBUG] newsapi_runner: ImportError details: {str(e)}")
+                filtered_articles = articles
             except Exception as e:
                 print(f"[ERROR] Post-processing error: {e}, using all articles")
                 print(f"[DEBUG] newsapi_runner: Exception type: {type(e)}")

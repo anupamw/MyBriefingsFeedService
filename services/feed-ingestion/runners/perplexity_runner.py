@@ -392,6 +392,11 @@ class PerplexityRunner:
                 else:
                     print(f"[WARNING] Post-processing failed: {filter_result.get('error', 'Unknown error')}, using all articles")
                     filtered_items = content_items
+            except ImportError as e:
+                print(f"[ERROR] Post-processing ImportError: {e}")
+                print(f"[DEBUG] perplexity_runner: ImportError type: {type(e)}")
+                print(f"[DEBUG] perplexity_runner: ImportError details: {str(e)}")
+                filtered_items = content_items
             except Exception as e:
                 print(f"[ERROR] Post-processing error: {e}, using all articles")
                 print(f"[DEBUG] perplexity_runner: Exception type: {type(e)}")
