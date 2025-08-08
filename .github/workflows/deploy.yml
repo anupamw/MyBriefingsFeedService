@@ -26,7 +26,61 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        pip install -r services/feed-ingestion/requirements.txt
         pip install requests  # For testing
+    
+    - name: Validate Python imports
+      run: |
+        echo "🔍 Validating Python imports..."
+        
+        # Test main service imports
+        echo "Testing main service imports..."
+        python -c "
+        import sys
+        sys.path.append('.')
+        try:
+            from main import app
+            print('✅ Main service imports successful')
+        except ImportError as e:
+            print(f'❌ Main service import error: {e}')
+            sys.exit(1)
+        "
+        
+        # Test ingestion service imports
+        echo "Testing ingestion service imports..."
+        python -c "
+        import sys
+        import os
+        sys.path.append('.')
+        sys.path.append('./services/feed-ingestion')
+        
+        # Test basic imports
+        try:
+            from services.feed_ingestion.main import app
+            print('✅ Ingestion service main imports successful')
+        except ImportError as e:
+            print(f'❌ Ingestion service main import error: {e}')
+            sys.exit(1)
+        
+        # Test runner imports
+        try:
+            from services.feed_ingestion.runners.perplexity_runner import PerplexityRunner
+            from services.feed_ingestion.runners.newsapi_runner import NewsAPIRunner
+            print('✅ Runner imports successful')
+        except ImportError as e:
+            print(f'❌ Runner import error: {e}')
+            sys.exit(1)
+        
+        # Test feed_filter import specifically
+        try:
+            from services.feed_ingestion.utils.feed_filter import feed_filter
+            print('✅ Feed filter import successful')
+        except ImportError as e:
+            print(f'❌ Feed filter import error: {e}')
+            sys.exit(1)
+        "
+        
+        echo "✅ All imports validated successfully"
     
     - name: Run application tests
       run: |
