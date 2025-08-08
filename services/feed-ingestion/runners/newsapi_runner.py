@@ -293,7 +293,9 @@ class NewsAPIRunner:
             
             # Apply post-processing filtering
             try:
+                print(f"[DEBUG] newsapi_runner: Attempting to import feed_filter")
                 from services.feed_ingestion.utils.feed_filter import feed_filter
+                print(f"[DEBUG] newsapi_runner: Successfully imported feed_filter")
                 filter_result = feed_filter.filter_feed_items(category_name, short_summary, articles_for_filtering)
                 
                 if filter_result['success']:
@@ -313,6 +315,8 @@ class NewsAPIRunner:
                     filtered_articles = articles
             except Exception as e:
                 print(f"[ERROR] Post-processing error: {e}, using all articles")
+                print(f"[DEBUG] newsapi_runner: Exception type: {type(e)}")
+                print(f"[DEBUG] newsapi_runner: Exception details: {str(e)}")
                 filtered_articles = articles
         else:
             # No post-processing, use all articles
