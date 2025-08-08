@@ -57,9 +57,10 @@ jobs:
         
         print(f'Python path: {sys.path}')
         
-        # Test basic imports
+        # Test basic imports - use the correct module names
         try:
-            from services.feed_ingestion.main import app
+            # Import from the feed-ingestion directory directly
+            from main import app
             print('✅ Ingestion service main imports successful')
         except ImportError as e:
             print(f'❌ Ingestion service main import error: {e}')
@@ -67,8 +68,8 @@ jobs:
         
         # Test runner imports
         try:
-            from services.feed_ingestion.runners.perplexity_runner import PerplexityRunner
-            from services.feed_ingestion.runners.newsapi_runner import NewsAPIRunner
+            from runners.perplexity_runner import PerplexityRunner
+            from runners.newsapi_runner import NewsAPIRunner
             print('✅ Runner imports successful')
         except ImportError as e:
             print(f'❌ Runner import error: {e}')
@@ -76,7 +77,7 @@ jobs:
         
         # Test feed_filter import specifically
         try:
-            from services.feed_ingestion.utils.feed_filter import feed_filter
+            from utils.feed_filter import feed_filter
             print('✅ Feed filter import successful')
         except ImportError as e:
             print(f'❌ Feed filter import error: {e}')
