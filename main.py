@@ -2332,6 +2332,24 @@ async def proxy_debug_user_feed(user_id: int):
         print(f"[ERROR] Proxy debug user feed error: {e}")
         raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
 
+@app.get("/api/ingestion/debug/user-feed-all/{user_id}")
+async def proxy_debug_user_feed_all(user_id: int):
+    """Proxy endpoint to forward debug user feed ALL requests to ingestion service - NO AUTH REQUIRED"""
+    try:
+        print(f"[DEBUG] Proxy debug user feed ALL called with user_id: {user_id}")
+        
+        # Forward to ingestion service
+        import requests
+        ingestion_url = f"{INGESTION_SERVICE_URL}/debug/user-feed-all/{user_id}"
+        print(f"[DEBUG] Forwarding to: {ingestion_url}")
+        response = requests.get(ingestion_url, timeout=15)
+        print(f"[DEBUG] Proxy debug user feed ALL response status: {response.status_code}")
+        
+        return response.json()
+    except Exception as e:
+        print(f"[ERROR] Proxy debug user feed ALL error: {e}")
+        raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
+
 @app.get("/debug/orphaned-feed-items")
 async def debug_orphaned_feed_items(limit: int = 50):
     """Debug endpoint to show orphaned feed items (items with categories that don't exist in user_categories)"""

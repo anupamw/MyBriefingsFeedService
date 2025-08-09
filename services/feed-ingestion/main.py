@@ -689,6 +689,55 @@ async def debug_user_feed(user_id: int, db: SessionLocal = Depends(get_db)):
         }
     }
 
+@app.get("/debug/user-feed-all/{user_id}")
+async def debug_user_feed_all(user_id: int, db: SessionLocal = Depends(get_db)):
+    """Debug endpoint: show ALL feed items for a user (relevant and irrelevant) - NO AUTH REQUIRED"""
+    # Get user categories
+    user_categories = db.query(UserCategory).filter(UserCategory.user_id == user_id).all()
+    
+    # Get category names and short summaries for this user
+    category_names_and_summaries = []
+    for cat in user_categories:
+        category_names_and_summaries.append(cat.category_name)
+        if cat.short_summary:
+            category_names_and_summaries.append(cat.short_summary)
+    
+    # Get ALL feed items for those categories (include both category_name and short_summary)
+    feed_items = []
+    if category_names_and_summaries:
+        feed_items = db.query(FeedItem).filter(FeedItem.category.in_(category_names_and_summaries)).order_by(FeedItem.created_at.desc()).all()
+    
+    # Separate relevant and irrelevant items
+    relevant_items = [item for item in feed_items if item.is_relevant]
+    irrelevant_items = [item for item in feed_items if not item.is_relevant]
+    
+    return {
+        "user_id": user_id,
+        "categories": [cat.category_name for cat in user_categories],
+        "feed_items": [
+            {
+                "id": item.id,
+                "title": item.title,
+                "category": item.category,
+                "source": item.source,
+                "published_at": to_utc_z(item.published_at) if item.published_at else None,
+                "created_at": to_utc_z(item.created_at) if item.created_at else None,
+                "is_relevant": item.is_relevant,
+                "relevance_reason": item.relevance_reason,
+                "url": item.url,
+                "summary": item.summary
+            }
+            for item in feed_items
+        ],
+        "summary": {
+            "total_items": len(feed_items),
+            "relevant_items": len(relevant_items),
+            "irrelevant_items": len(irrelevant_items),
+            "relevance_rate": round(len(relevant_items) / len(feed_items) * 100, 1) if feed_items else 0
+        },
+        "note": "This endpoint shows ALL feed items (relevant and irrelevant) for debugging AI filtering decisions"
+    }
+
 @app.get("/debug/reddit-feed")
 async def debug_reddit_feed(
     user_id: Optional[int] = None,
