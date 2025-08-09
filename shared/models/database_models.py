@@ -61,6 +61,10 @@ class FeedItem(Base):
     processing_priority = Column(Integer, default=1)  # 1=high, 5=low
     last_processed = Column(DateTime)
     
+    # AI filtering results
+    is_relevant = Column(Boolean, default=True)  # AI-determined relevance (True=relevant, False=irrelevant)
+    relevance_reason = Column(Text)  # AI explanation for relevance decision
+    
     # Raw data from source
     raw_data = Column(JSON)  # Store original response from API
     
@@ -70,6 +74,7 @@ class FeedItem(Base):
         Index('idx_feed_items_source', 'source'),
         Index('idx_feed_items_category', 'category'),
         Index('idx_feed_items_processed', 'is_processed'),
+        Index('idx_feed_items_relevant', 'is_relevant'),
     )
 
 class IngestionJob(Base):

@@ -263,7 +263,7 @@ class NewsAPIRunner:
 
     
     def save_feed_items(self, articles: List[Dict], data_source: DataSource, category_info: Dict[str, Any] = None) -> Dict[str, int]:
-        """Save NewsAPI articles as feed items"""
+        """Save NewsAPI articles as feed items with AI filtering"""
         created = 0
         updated = 0
         
@@ -274,61 +274,9 @@ class NewsAPIRunner:
         
         print(f"[DEBUG] Starting to save {len(articles)} NewsAPI articles for category '{category_name}'")
         
-        # Check if post-processing is enabled for NewsAPI
-        enable_post_processing = os.getenv("ENABLE_POST_PROCESSING_NEWSAPI", "false").lower() == "true"
-        
-        if enable_post_processing and articles:
-            print(f"[DEBUG] Post-processing enabled for NewsAPI, filtering {len(articles)} articles")
-            
-            # Prepare articles for filtering
-            articles_for_filtering = []
-            for i, article in enumerate(articles, 1):
-                articles_for_filtering.append({
-                    'item_number': i,
-                    'title': article.get('title', ''),
-                    'summary': article.get('description', ''),
-                    'content': article.get('content', ''),
-                    'source': f"NewsAPI - {article.get('source', {}).get('name', 'Unknown')}"
-                })
-            
-            # Apply post-processing filtering
-            try:
-                print(f"[DEBUG] newsapi_runner: Attempting to import feed_filter")
-                from utils.feed_filter import feed_filter
-                print(f"[DEBUG] newsapi_runner: Successfully imported feed_filter")
-                filter_result = feed_filter.filter_feed_items(category_name, short_summary, articles_for_filtering)
-                
-                if filter_result['success']:
-                    # Use only filtered articles
-                    filtered_articles = filter_result['filtered_items']
-                    print(f"[DEBUG] Post-processing completed: {len(articles)} -> {len(filtered_articles)} articles kept")
-                    
-                    # Log filtering stats
-                    if hasattr(self, 'filtering_stats'):
-                        self.filtering_stats['newsapi'] = {
-                            'total': len(articles),
-                            'kept': len(filtered_articles),
-                            'filtered': len(articles) - len(filtered_articles)
-                        }
-                else:
-                    print(f"[WARNING] Post-processing failed: {filter_result.get('error', 'Unknown error')}, using all articles")
-                    filtered_articles = articles
-            except ImportError as e:
-                print(f"[ERROR] Post-processing ImportError: {e}")
-                print(f"[DEBUG] newsapi_runner: ImportError type: {type(e)}")
-                print(f"[DEBUG] newsapi_runner: ImportError details: {str(e)}")
-                filtered_articles = articles
-            except Exception as e:
-                print(f"[ERROR] Post-processing error: {e}, using all articles")
-                print(f"[DEBUG] newsapi_runner: Exception type: {type(e)}")
-                print(f"[DEBUG] newsapi_runner: Exception details: {str(e)}")
-                filtered_articles = articles
-        else:
-            # No post-processing, use all articles
-            filtered_articles = articles
-            print(f"[DEBUG] Post-processing disabled for NewsAPI, using all {len(filtered_articles)} articles")
-        
-        for article in filtered_articles:
+        # First, save ALL articles to the database
+        saved_items = []
+        for article in articles:
             try:
                 # Extract image URL
                 image_url = self.extract_image_url(article)
@@ -341,19 +289,20 @@ class NewsAPIRunner:
                     except:
                         published_at = datetime.utcnow()
                 
-                # Create feed item
+                # Create feed item (initially marked as relevant)
                 feed_item = FeedItem(
                     title=article.get("title", "Untitled")[:500],  # Truncate to fit DB field
                     summary=article.get("description", ""),
                     content=article.get("content", ""),
                     url=article.get("url", ""),
-                    image_url=image_url,  # NEW: Store image URL
+                    image_url=image_url,
                     source=f"NewsAPI - {article.get('source', {}).get('name', 'Unknown')}",
                     data_source_id=data_source.id,
                     published_at=published_at,
                     raw_data=article,
                     category=category_name,
-                    tags=["newsapi", category_name.lower(), "news"]
+                    tags=["newsapi", category_name.lower(), "news"],
+                    is_relevant=True  # Default to relevant, will be updated by AI
                 )
                 
                 # Add user-specific metadata if available
@@ -362,38 +311,85 @@ class NewsAPIRunner:
                         **article,
                         "user_category_id": category_id,
                         "user_id": user_id,
-                        "category_name": category_name,
-                        "image_url": image_url
+                        "category_name": category_name
                     }
                 
                 self.db.add(feed_item)
+                self.db.flush()  # Get the ID
+                saved_items.append(feed_item)
                 created += 1
                 
-                print(f"[DEBUG] Added NewsAPI article: '{feed_item.title[:50]}...' with image: {image_url is not None}")
-                
             except Exception as e:
-                print(f"[ERROR] Error saving NewsAPI article: {e}")
+                print(f"Error saving feed item: {e}")
                 continue
         
-        try:
-            self.db.commit()
-            print(f"[DEBUG] Successfully committed {created} NewsAPI articles to database")
+        self.db.commit()
+        print(f"[DEBUG] Saved {created} NewsAPI articles to database")
+        
+        # Now apply AI filtering if enabled
+        enable_post_processing = os.getenv("ENABLE_POST_PROCESSING_NEWSAPI", "false").lower() == "true"
+        
+        if enable_post_processing and saved_items:
+            print(f"[DEBUG] Post-processing enabled for NewsAPI, evaluating {len(saved_items)} articles")
             
-            # Update the history record with actual saved count
-            if created > 0:
-                # Find the most recent history record for this category and update it
-                recent_record = self.db.query(NewsAPICallHistory).filter(
-                    NewsAPICallHistory.category == category_name
-                ).order_by(NewsAPICallHistory.timestamp.desc()).first()
+            # Prepare articles for filtering
+            articles_for_filtering = []
+            for i, item in enumerate(saved_items, 1):
+                articles_for_filtering.append({
+                    'item_number': i,
+                    'title': item.title or '',
+                    'summary': item.summary or '',
+                    'content': item.content or '',
+                    'source': item.source or ''
+                })
+            
+            # Apply AI filtering
+            try:
+                print(f"[DEBUG] newsapi_runner: Attempting to import feed_filter")
+                from utils.feed_filter import feed_filter
+                print(f"[DEBUG] newsapi_runner: Successfully imported feed_filter")
+                filter_result = feed_filter.filter_feed_items(category_name, short_summary, articles_for_filtering)
                 
-                if recent_record:
-                    recent_record.articles_saved = created
+                if filter_result['success']:
+                    # Update items based on AI evaluation
+                    evaluations = filter_result.get('evaluations', [])
+                    relevant_count = 0
+                    
+                    for eval_result in evaluations:
+                        item_index = eval_result.get('item_index', 0)
+                        is_relevant = eval_result.get('is_relevant', True)
+                        reason = eval_result.get('reason', 'No reason provided')
+                        
+                        if 0 <= item_index < len(saved_items):
+                            item = saved_items[item_index]
+                            item.is_relevant = is_relevant
+                            item.relevance_reason = reason
+                            
+                            if is_relevant:
+                                relevant_count += 1
+                    
                     self.db.commit()
-            
-        except Exception as e:
-            print(f"[ERROR] Error committing to database: {e}")
-            self.db.rollback()
-            return {"created": 0, "updated": 0, "error": str(e)}
+                    print(f"[DEBUG] AI filtering completed: {len(saved_items)} -> {relevant_count} articles marked as relevant")
+                    
+                    # Log filtering stats
+                    if hasattr(self, 'filtering_stats'):
+                        self.filtering_stats['newsapi'] = {
+                            'total': len(saved_items),
+                            'kept': relevant_count,
+                            'filtered': len(saved_items) - relevant_count
+                        }
+                else:
+                    print(f"[WARNING] Post-processing failed: {filter_result.get('error', 'Unknown error')}, all articles marked as relevant")
+            except ImportError as e:
+                print(f"[ERROR] Post-processing ImportError: {e}")
+                print(f"[DEBUG] newsapi_runner: ImportError type: {type(e)}")
+                print(f"[DEBUG] newsapi_runner: ImportError details: {str(e)}")
+            except Exception as e:
+                print(f"[ERROR] Post-processing error: {e}, all articles marked as relevant")
+                print(f"[DEBUG] newsapi_runner: Exception type: {type(e)}")
+                print(f"[DEBUG] newsapi_runner: Exception details: {str(e)}")
+        else:
+            print(f"[DEBUG] Post-processing disabled for NewsAPI, all {len(saved_items)} articles marked as relevant")
         
         return {"created": created, "updated": updated}
 

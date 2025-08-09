@@ -646,7 +646,7 @@ async def debug_test_perplexity_api():
 
 @app.get("/debug/user-feed/{user_id}")
 async def debug_user_feed(user_id: int, db: SessionLocal = Depends(get_db)):
-    """Debug endpoint: show user categories and feed items for a user"""
+    """Debug endpoint: show user categories and feed items for a user (including AI filtering results)"""
     # Get user categories
     user_categories = db.query(UserCategory).filter(UserCategory.user_id == user_id).all()
     
@@ -661,6 +661,11 @@ async def debug_user_feed(user_id: int, db: SessionLocal = Depends(get_db)):
     feed_items = []
     if category_names_and_summaries:
         feed_items = db.query(FeedItem).filter(FeedItem.category.in_(category_names_and_summaries)).all()
+    
+    # Separate relevant and irrelevant items
+    relevant_items = [item for item in feed_items if item.is_relevant]
+    irrelevant_items = [item for item in feed_items if not item.is_relevant]
+    
     return {
         "user_id": user_id,
         "categories": [cat.category_name for cat in user_categories],
@@ -670,10 +675,18 @@ async def debug_user_feed(user_id: int, db: SessionLocal = Depends(get_db)):
                 "title": item.title,
                 "category": item.category,
                 "source": item.source,
-                "published_at": to_utc_z(item.published_at) if item.published_at else None
+                "published_at": to_utc_z(item.published_at) if item.published_at else None,
+                "is_relevant": item.is_relevant,
+                "relevance_reason": item.relevance_reason
             }
             for item in feed_items
-        ]
+        ],
+        "summary": {
+            "total_items": len(feed_items),
+            "relevant_items": len(relevant_items),
+            "irrelevant_items": len(irrelevant_items),
+            "relevance_rate": round(len(relevant_items) / len(feed_items) * 100, 1) if feed_items else 0
+        }
     }
 
 @app.get("/debug/reddit-feed")

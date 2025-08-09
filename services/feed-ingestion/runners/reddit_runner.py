@@ -212,6 +212,8 @@ class RedditRunner:
         print(f"[DEBUG] Database connection info: {self.db.bind.url}")
         print(f"[DEBUG] User category name: {user_category_name}")
         
+        # First, save ALL posts to the database
+        saved_items = []
         for post in posts:
             try:
                 # Truncate title to fit database field
@@ -233,12 +235,15 @@ class RedditRunner:
                     engagement_score=post.get("score", 0),
                     raw_data=post,
                     category=category,
-                    tags=["reddit", post.get("subreddit", "").lower()]
+                    tags=["reddit", post.get("subreddit", "").lower()],
+                    is_relevant=True  # Default to relevant, will be updated by AI
                 )
                 print(f"[DEBUG] Saving Reddit post: '{feed_item.title}' with category '{feed_item.category}'")
                 print(f"[DEBUG] Feed item details: source='{feed_item.source}', url='{feed_item.url[:50]}...'")
                 
                 self.db.add(feed_item)
+                self.db.flush()  # Get the ID
+                saved_items.append(feed_item)
                 created += 1
                 print(f"[DEBUG] Added feed item to session (created={created})")
                 
@@ -270,6 +275,71 @@ class RedditRunner:
             print(f"[ERROR] Commit traceback: {traceback.format_exc()}")
             self.db.rollback()
             return {"created": 0, "error": str(e)}
+        
+        # Now apply AI filtering if enabled
+        enable_post_processing = os.getenv("ENABLE_POST_PROCESSING_REDDIT", "false").lower() == "true"
+        
+        if enable_post_processing and saved_items:
+            print(f"[DEBUG] Post-processing enabled for Reddit, evaluating {len(saved_items)} posts")
+            
+            # Prepare posts for filtering
+            posts_for_filtering = []
+            for i, item in enumerate(saved_items, 1):
+                posts_for_filtering.append({
+                    'item_number': i,
+                    'title': item.title or '',
+                    'summary': item.summary or '',
+                    'content': item.content or '',
+                    'source': item.source or ''
+                })
+            
+            # Apply AI filtering
+            try:
+                print(f"[DEBUG] reddit_runner: Attempting to import feed_filter")
+                from utils.feed_filter import feed_filter
+                print(f"[DEBUG] reddit_runner: Successfully imported feed_filter")
+                filter_result = feed_filter.filter_feed_items(category, category, posts_for_filtering)
+                
+                if filter_result['success']:
+                    # Update items based on AI evaluation
+                    evaluations = filter_result.get('evaluations', [])
+                    relevant_count = 0
+                    
+                    for eval_result in evaluations:
+                        item_index = eval_result.get('item_index', 0)
+                        is_relevant = eval_result.get('is_relevant', True)
+                        reason = eval_result.get('reason', 'No reason provided')
+                        
+                        if 0 <= item_index < len(saved_items):
+                            item = saved_items[item_index]
+                            item.is_relevant = is_relevant
+                            item.relevance_reason = reason
+                            
+                            if is_relevant:
+                                relevant_count += 1
+                    
+                    self.db.commit()
+                    print(f"[DEBUG] AI filtering completed: {len(saved_items)} -> {relevant_count} posts marked as relevant")
+                    
+                    # Log filtering stats
+                    if hasattr(self, 'filtering_stats'):
+                        self.filtering_stats['reddit'] = {
+                            'total': len(saved_items),
+                            'kept': relevant_count,
+                            'filtered': len(saved_items) - relevant_count
+                        }
+                else:
+                    print(f"[WARNING] Post-processing failed: {filter_result.get('error', 'Unknown error')}, all posts marked as relevant")
+            except ImportError as e:
+                print(f"[ERROR] Post-processing ImportError: {e}")
+                print(f"[DEBUG] reddit_runner: ImportError type: {type(e)}")
+                print(f"[DEBUG] reddit_runner: ImportError details: {str(e)}")
+            except Exception as e:
+                print(f"[ERROR] Post-processing error: {e}, all posts marked as relevant")
+                print(f"[DEBUG] reddit_runner: Exception type: {type(e)}")
+                print(f"[DEBUG] reddit_runner: Exception details: {str(e)}")
+        else:
+            print(f"[DEBUG] Post-processing disabled for Reddit, all {len(saved_items)} posts marked as relevant")
             
         return {"created": created}
 

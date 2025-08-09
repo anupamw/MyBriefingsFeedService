@@ -13,7 +13,7 @@ from passlib.context import CryptContext
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, UniqueConstraint
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, UniqueConstraint, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 import time
@@ -80,6 +80,10 @@ class FeedItemDB(Base):
     published_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
     category = Column(String(100))  # Add category field
+    
+    # AI filtering results
+    is_relevant = Column(Boolean, default=True)  # AI-determined relevance (True=relevant, False=irrelevant)
+    relevance_reason = Column(Text)  # AI explanation for relevance decision
 
 class UserCategoryDB(Base):
     __tablename__ = "user_categories"
@@ -1714,6 +1718,9 @@ async def get_feed(limit: int = 30, offset: int = 0, category: Optional[str] = N
         # Get items with standard ordering first
         query = query.order_by(FeedItemDB.published_at.desc(), FeedItemDB.created_at.desc())
         
+        # Filter by relevance - only show relevant items in UI
+        query = query.filter(FeedItemDB.is_relevant == True)
+        
         if randomize:
             # Get more items for better randomization
             items = query.offset(offset).limit(limit * 2).all()
@@ -1753,12 +1760,13 @@ async def get_feed(limit: int = 30, offset: int = 0, category: Optional[str] = N
 
 @app.get("/feed/{item_id}", response_model=FeedItem)
 async def get_feed_item(item_id: int, current_user: dict = Depends(get_current_user)):
-    """Get a specific feed item by ID (protected route)"""
+    """Get a specific feed item by ID (protected route) - only returns relevant items"""
     db = SessionLocal()
     try:
-        item = db.query(FeedItemDB).filter(FeedItemDB.id == item_id).first()
+        # Only return relevant items
+        item = db.query(FeedItemDB).filter(FeedItemDB.id == item_id, FeedItemDB.is_relevant == True).first()
         if not item:
-            raise HTTPException(status_code=404, detail="Feed item not found")
+            raise HTTPException(status_code=404, detail="Feed item not found or not relevant")
         
         # Build a mapping from category_name to short_summary for this user
         user_category_map = {cat.category_name: cat.short_summary for cat in db.query(UserCategoryDB).filter(UserCategoryDB.user_id == current_user["id"]).all()}

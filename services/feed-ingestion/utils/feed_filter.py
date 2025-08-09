@@ -86,18 +86,22 @@ INSTRUCTIONS:
    - Content relevance to the category summary
    - Whether the item would be valuable for someone interested in this category
 
-3. Return a JSON response with the following format:
+3. For each item, provide:
+   - A boolean is_relevant (true if relevant, false if not)
+   - A clear reason for your decision
+
+4. Return a JSON response with the following format:
 {{
     "evaluations": [
         {{
             "item_number": 1,
-            "is_relevant": true/false,
-            "reason": "Brief explanation of why this item is relevant or not"
+            "is_relevant": true,
+            "reason": "This article directly discusses [specific topic] which aligns perfectly with the category focus on [category topic]"
         }},
         {{
             "item_number": 2,
-            "is_relevant": true/false,
-            "reason": "Brief explanation of why this item is relevant or not"
+            "is_relevant": false,
+            "reason": "While this article mentions [topic], it's primarily about [different topic] and doesn't provide value for someone interested in [category topic]"
         }}
         // ... continue for all items
     ],
@@ -111,29 +115,29 @@ INSTRUCTIONS:
 IMPORTANT:
 - Be strict but fair in your evaluation
 - Consider the category context and user intent
+- Provide specific, actionable reasoning for each decision
 - If in doubt, err on the side of relevance
-- Provide clear, concise reasoning for each decision
 - Ensure the JSON is properly formatted and valid
 """
         
         return prompt
     
     def filter_feed_items(self, category_name: str, short_summary: str, feed_items: List[Dict]) -> Dict[str, Any]:
-        """Filter feed items using Perplexity AI"""
+        """Filter feed items using Perplexity AI and return evaluation results for each item"""
         
         if not self.perplexity_client:
             print("[ERROR] Perplexity client not available")
             return {
                 "success": False,
                 "error": "Perplexity client not available",
-                "filtered_items": feed_items,
-                "evaluations": []
+                "evaluations": [],
+                "original_count": len(feed_items),
+                "filtered_count": len(feed_items)
             }
         
         if not feed_items:
             return {
                 "success": True,
-                "filtered_items": [],
                 "evaluations": [],
                 "original_count": 0,
                 "filtered_count": 0
@@ -151,8 +155,9 @@ IMPORTANT:
                 return {
                     "success": False,
                     "error": "No response from Perplexity",
-                    "filtered_items": feed_items,
-                    "evaluations": []
+                    "evaluations": [],
+                    "original_count": len(feed_items),
+                    "filtered_count": len(feed_items)
                 }
             
             # Extract the content from the response
@@ -165,8 +170,9 @@ IMPORTANT:
                 return {
                     "success": False,
                     "error": "No content in Perplexity response",
-                    "filtered_items": feed_items,
-                    "evaluations": []
+                    "evaluations": [],
+                    "original_count": len(feed_items),
+                    "filtered_count": len(feed_items)
                 }
             
             # Parse the JSON response
@@ -178,28 +184,37 @@ IMPORTANT:
                 return {
                     "success": False,
                     "error": f"Invalid JSON response: {e}",
-                    "filtered_items": feed_items,
-                    "evaluations": []
+                    "evaluations": [],
+                    "original_count": len(feed_items),
+                    "filtered_count": len(feed_items)
                 }
             
-            # Extract relevant items
+            # Extract evaluations and create results
             evaluations = result.get('evaluations', [])
-            relevant_items = []
+            evaluation_results = []
             
             for eval_item in evaluations:
                 item_number = eval_item.get('item_number', 0)
                 is_relevant = eval_item.get('is_relevant', False)
+                reason = eval_item.get('reason', 'No reason provided')
                 
-                if is_relevant and 1 <= item_number <= len(feed_items):
-                    relevant_items.append(feed_items[item_number - 1])
+                if 1 <= item_number <= len(feed_items):
+                    evaluation_results.append({
+                        'item_index': item_number - 1,
+                        'is_relevant': is_relevant,
+                        'reason': reason,
+                        'item': feed_items[item_number - 1]
+                    })
+            
+            # Count relevant items
+            relevant_count = sum(1 for eval_result in evaluation_results if eval_result['is_relevant'])
             
             return {
                 "success": True,
-                "filtered_items": relevant_items,
-                "evaluations": evaluations,
+                "evaluations": evaluation_results,
                 "summary": result.get('summary', {}),
                 "original_count": len(feed_items),
-                "filtered_count": len(relevant_items)
+                "filtered_count": relevant_count
             }
             
         except Exception as e:
@@ -207,8 +222,9 @@ IMPORTANT:
             return {
                 "success": False,
                 "error": str(e),
-                "filtered_items": feed_items,
-                "evaluations": []
+                "evaluations": [],
+                "original_count": len(feed_items),
+                "filtered_count": len(feed_items)
             }
 
 # Global instance
