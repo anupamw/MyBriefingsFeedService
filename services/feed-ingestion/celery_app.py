@@ -17,7 +17,8 @@ celery_app = Celery(
         "runners.perplexity_runner",
         "runners.reddit_runner",
         "runners.social_runner",
-        "runners.newsapi_runner"
+        "runners.newsapi_runner",
+        "runners.cleanup_runner"
     ]
 )
 
@@ -64,6 +65,12 @@ celery_app.conf.update(
             "task": "runners.reddit_runner.ingest_reddit_for_all_users",
             "schedule": 21600.0,  # Every 6 hours (6 * 60 * 60 seconds)
         },
+        # Cleanup tasks
+        "cleanup-old-feed-items": {
+            "task": "runners.cleanup_runner.cleanup_old_feed_items",
+            "schedule": 10800.0,  # Every 3 hours (3 * 60 * 60 seconds)
+            "args": [24]  # Delete items older than 24 hours
+        },
         # Disabled runners - uncomment to enable
         # "ingest-reddit": {
         #     "task": "runners.reddit_runner.ingest_reddit",
@@ -71,7 +78,7 @@ celery_app.conf.update(
         # },
         # "ingest-social": {
         #     "task": "runners.social_runner.ingest_social",
-        #     "schedule": 900.0,  # Every 15 minutes
+        #         "schedule": 900.0,  # Every 15 minutes
         # },
     },
     

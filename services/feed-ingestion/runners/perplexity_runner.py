@@ -353,6 +353,16 @@ class PerplexityRunner:
         
         print(f"[DEBUG] Starting to save {len(content_items)} Perplexity articles for category '{category_name}'")
         
+        # Clean up old Perplexity AI items for this category before inserting new ones
+        if content_items:
+            try:
+                from runners.cleanup_runner import CleanupRunner
+                cleanup_runner = CleanupRunner()
+                cleanup_result = cleanup_runner.cleanup_source_items_by_category(category_name, "Perplexity AI")
+                print(f"[CLEANUP] Perplexity cleanup for category '{category_name}': {cleanup_result}")
+            except Exception as e:
+                print(f"[WARNING] Failed to cleanup old Perplexity items: {e}")
+        
         # First, save ALL articles to the database
         saved_items = []
         for item in content_items:

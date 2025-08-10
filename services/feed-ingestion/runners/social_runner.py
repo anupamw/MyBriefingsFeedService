@@ -186,18 +186,17 @@ class SocialRunner:
         created = 0
         updated = 0
         
-        # Delete older items from the same source to prevent storage bloat
+        # Clean up old social media items for this category before inserting new ones
         if items:
             try:
-                # Delete items older than 7 days from the same source
-                cutoff_date = datetime.utcnow() - timedelta(days=7)
-                deleted_count = self.db.query(FeedItem).filter(
-                    FeedItem.data_source_id == data_source.id,
-                    FeedItem.created_at < cutoff_date
-                ).delete()
-                print(f"Deleted {deleted_count} old items from {data_source.name}")
+                from runners.cleanup_runner import CleanupRunner
+                cleanup_runner = CleanupRunner()
+                # Use category from the first item if available
+                category = items[0].get("category", "Social Media") if items else "Social Media"
+                cleanup_result = cleanup_runner.cleanup_source_items_by_category(category, "Social Media")
+                print(f"[CLEANUP] Social Media cleanup for category '{category}': {cleanup_result}")
             except Exception as e:
-                print(f"Error deleting old items: {e}")
+                print(f"[WARNING] Failed to cleanup old social media items: {e}")
         
         for item in items:
             try:

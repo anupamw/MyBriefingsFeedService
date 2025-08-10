@@ -274,6 +274,16 @@ class NewsAPIRunner:
         
         print(f"[DEBUG] Starting to save {len(articles)} NewsAPI articles for category '{category_name}'")
         
+        # Clean up old NewsAPI items for this category before inserting new ones
+        if articles:
+            try:
+                from runners.cleanup_runner import CleanupRunner
+                cleanup_runner = CleanupRunner()
+                cleanup_result = cleanup_runner.cleanup_source_items_by_category(category_name, "NewsAPI")
+                print(f"[CLEANUP] NewsAPI cleanup for category '{category_name}': {cleanup_result}")
+            except Exception as e:
+                print(f"[WARNING] Failed to cleanup old NewsAPI items: {e}")
+        
         # First, save ALL articles to the database
         saved_items = []
         for article in articles:

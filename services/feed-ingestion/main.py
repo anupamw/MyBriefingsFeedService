@@ -1068,5 +1068,30 @@ app.include_router(perplexity_debug_router)
 app.include_router(reddit_debug_router)
 app.include_router(newsapi_debug_router)
 
+@app.get("/debug/cleanup-status")
+async def get_cleanup_status():
+    """Debug endpoint to check cleanup task status and configuration"""
+    return {
+        "cleanup_configuration": {
+            "scheduled_task": "cleanup-old-feed-items",
+            "frequency": "Every 3 hours",
+            "retention_policy": "24 hours",
+            "task_name": "runners.cleanup_runner.cleanup_old_feed_items"
+        },
+        "cleanup_features": {
+            "automated_cleanup": True,
+            "source_based_cleanup": True,
+            "category_based_cleanup": True,
+            "user_based_cleanup": True
+        },
+        "cleanup_sources": [
+            "Perplexity AI",
+            "NewsAPI",
+            "Reddit",
+            "Social Media"
+        ],
+        "note": "Cleanup runs automatically every 3 hours and before each source ingestion"
+    }
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001) 

@@ -212,6 +212,16 @@ class RedditRunner:
         print(f"[DEBUG] Database connection info: {self.db.bind.url}")
         print(f"[DEBUG] User category name: {user_category_name}")
         
+        # Clean up old Reddit items for this category before inserting new ones
+        if posts and user_category_name:
+            try:
+                from runners.cleanup_runner import CleanupRunner
+                cleanup_runner = CleanupRunner()
+                cleanup_result = cleanup_runner.cleanup_source_items_by_category(user_category_name, "Reddit")
+                print(f"[CLEANUP] Reddit cleanup for category '{user_category_name}': {cleanup_result}")
+            except Exception as e:
+                print(f"[WARNING] Failed to cleanup old Reddit items: {e}")
+        
         # First, save ALL posts to the database
         saved_items = []
         for post in posts:
