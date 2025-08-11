@@ -1074,7 +1074,7 @@ async def get_cleanup_status():
     return {
         "cleanup_configuration": {
             "scheduled_task": "cleanup-old-feed-items",
-            "frequency": "Every 3 minutes (TEMPORARY FOR DEBUGGING)",
+            "frequency": "Every 3 hours",
             "retention_policy": "24 hours",
             "task_name": "runners.cleanup_runner.cleanup_old_feed_items"
         },
@@ -1090,7 +1090,7 @@ async def get_cleanup_status():
             "Reddit",
             "Social Media"
         ],
-        "note": "Cleanup runs automatically every 3 minutes (TEMPORARY) and before each source ingestion"
+        "note": "Cleanup runs automatically every 3 hours and before each source ingestion"
     }
 
 @app.get("/debug/cleanup-stats")
