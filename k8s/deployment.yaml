@@ -29,7 +29,7 @@ spec:
         - name: SECRET_KEY
           value: "your-super-secret-key-change-this-in-production"
         - name: INGESTION_SERVICE_URL
-          value: "http://64.227.134.87:30001"
+          value: "http://my-briefings-ingestion-service:8001"
         resources:
           requests:
             memory: "128Mi"
