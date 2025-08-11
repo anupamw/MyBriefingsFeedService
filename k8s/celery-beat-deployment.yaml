@@ -5,6 +5,9 @@ metadata:
   namespace: my-briefings
   labels:
     app: my-briefings-celery-beat
+  annotations:
+    deployment.kubernetes.io/revision: "2"
+    last-updated: "2025-08-11T08:45:00Z"
 spec:
   replicas: 1
   selector:
