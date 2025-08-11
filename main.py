@@ -1488,6 +1488,8 @@ async def root():
 
 
 
+
+
         </script>
     </body>
     </html>
@@ -2603,26 +2605,19 @@ async def debug_user_feed_stats(user_id: int):
 
 @app.get("/debug/filtering-stats/{user_id}")
 async def debug_filtering_stats(user_id: int):
-    """Debug endpoint to show filtering statistics for a user (no auth required)"""
+    """Debug endpoint to show filtering statistics for a user's feed items"""
+    
     db = SessionLocal()
     try:
         # Get user categories
         user_categories = db.query(UserCategoryDB).filter(UserCategoryDB.user_id == user_id).all()
-        
         if not user_categories:
-            return {
-                "user_id": user_id,
-                "message": "No categories found for this user",
-                "filtering_stats": {}
-            }
+            raise HTTPException(status_code=404, detail="No categories found for user")
         
-        # Get category names
+        # Get feed items for this user's categories
         category_names = [cat.category_name for cat in user_categories]
-        
-        # Get all feed items for this user's categories
         feed_items = db.query(FeedItemDB).filter(FeedItemDB.category.in_(category_names)).all()
         
-        # Calculate filtering stats
         total_items = len(feed_items)
         source_breakdown = {}
         category_breakdown = {}
@@ -2683,41 +2678,89 @@ async def debug_filtering_stats(user_id: int):
     finally:
         db.close()
 
-@app.get("/api/ingestion/debug/cleanup-status")
-async def proxy_debug_cleanup_status():
-    """Proxy endpoint to forward cleanup status requests to ingestion service - NO AUTH REQUIRED"""
-    try:
-        print(f"[DEBUG] Proxy debug cleanup status called")
-        
-        # Forward to ingestion service
-        import requests
-        ingestion_url = f"{INGESTION_SERVICE_URL}/debug/cleanup-status"
-        print(f"[DEBUG] Forwarding to: {ingestion_url}")
-        response = requests.get(ingestion_url, timeout=15)
-        print(f"[DEBUG] Proxy cleanup status response status: {response.status_code}")
-        
-        return response.json()
-    except Exception as e:
-        print(f"[ERROR] Proxy cleanup status error: {e}")
-        raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
+@app.get("/debug/cleanup-status")
+async def debug_cleanup_status():
+    """Debug endpoint to check cleanup task status and configuration"""
+    return {
+        "cleanup_configuration": {
+            "scheduled_task": "cleanup-old-feed-items",
+            "frequency": "Every 3 hours",
+            "retention_policy": "24 hours",
+            "task_name": "runners.cleanup_runner.cleanup_old_feed_items"
+        },
+        "cleanup_features": {
+            "automated_cleanup": True,
+            "source_based_cleanup": True,
+            "category_based_cleanup": True,
+            "user_based_cleanup": True
+        },
+        "cleanup_sources": [
+            "Perplexity AI",
+            "NewsAPI",
+            "Reddit",
+            "Social Media"
+        ],
+        "note": "Cleanup runs automatically every 3 hours and before each source ingestion"
+    }
 
-@app.get("/api/ingestion/debug/cleanup-stats")
-async def proxy_debug_cleanup_stats():
-    """Proxy endpoint to forward cleanup stats requests to ingestion service - NO AUTH REQUIRED"""
+@app.get("/debug/cleanup-stats")
+async def debug_cleanup_stats():
+    """Debug endpoint to show actual cleanup statistics from the database"""
+    db = SessionLocal()
     try:
-        print(f"[DEBUG] Proxy debug cleanup stats called")
+        from datetime import datetime, timedelta
         
-        # Forward to ingestion service
-        import requests
-        ingestion_url = f"{INGESTION_SERVICE_URL}/debug/cleanup-stats"
-        print(f"[DEBUG] Forwarding to: {ingestion_url}")
-        response = requests.get(ingestion_url, timeout=15)
-        print(f"[DEBUG] Proxy cleanup stats response status: {response.status_code}")
+        # Get current time
+        now = datetime.utcnow()
         
-        return response.json()
+        # Calculate time thresholds
+        cutoff_24h = now - timedelta(hours=24)
+        cutoff_48h = now - timedelta(hours=48)
+        cutoff_7d = now - timedelta(days=7)
+        
+        # Count items by age
+        items_24h_old = db.query(FeedItemDB).filter(FeedItemDB.created_at < cutoff_24h).count()
+        items_48h_old = db.query(FeedItemDB).filter(FeedItemDB.created_at < cutoff_48h).count()
+        items_7d_old = db.query(FeedItemDB).filter(FeedItemDB.created_at < cutoff_7d).count()
+        total_items = db.query(FeedItemDB).count()
+        
+        # Count items by source
+        source_counts = {}
+        sources = db.query(FeedItemDB.source).distinct().all()
+        for source in sources:
+            if source[0]:
+                source_counts[source[0]] = db.query(FeedItemDB).filter(FeedItemDB.source == source[0]).count()
+        
+        # Count items by relevance
+        relevant_items = db.query(FeedItemDB).filter(FeedItemDB.is_relevant == True).count()
+        irrelevant_items = db.query(FeedItemDB).filter(FeedItemDB.is_relevant == False).count()
+        
+        return {
+            "current_time": now.isoformat(),
+            "item_counts": {
+                "total_items": total_items,
+                "items_older_than_24h": items_24h_old,
+                "items_older_than_48h": items_48h_old,
+                "items_older_than_7d": items_7d_old
+            },
+            "relevance_counts": {
+                "relevant_items": relevant_items,
+                "irrelevant_items": irrelevant_items,
+                "relevance_rate": round(relevant_items / total_items * 100, 1) if total_items > 0 else 0
+            },
+            "source_distribution": source_counts,
+            "cleanup_recommendations": {
+                "should_cleanup_24h": items_24h_old > 0,
+                "should_cleanup_48h": items_48h_old > 0,
+                "should_cleanup_7d": items_7d_old > 0
+            }
+        }
+        
     except Exception as e:
-        print(f"[ERROR] Proxy cleanup stats error: {e}")
-        raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
+        print(f"[ERROR] Cleanup stats error: {e}")
+        return {"error": f"Failed to get cleanup stats: {str(e)}"}
+    finally:
+        db.close()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
