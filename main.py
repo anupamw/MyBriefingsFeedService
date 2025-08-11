@@ -2031,7 +2031,7 @@ async def delete_feed_data_for_user(
             ).delete()
         
         # Delete user's categories
-        categories_deleted = db.query(UserCategoryDB).filter(
+        deleted_categories_count = db.query(UserCategoryDB).filter(
             UserCategoryDB.user_id == user_id
         ).delete()
         
@@ -2040,7 +2040,7 @@ async def delete_feed_data_for_user(
         return {
             "message": f"Successfully deleted feed data for user {user_id}",
             "feed_items_deleted": deleted_count,
-            "categories_deleted": categories_deleted
+            "categories_deleted": deleted_categories_count
         }
     except Exception as e:
         db.rollback()
@@ -2682,6 +2682,42 @@ async def debug_filtering_stats(user_id: int):
         raise HTTPException(status_code=500, detail=f"Error getting filtering stats: {str(e)}")
     finally:
         db.close()
+
+@app.get("/api/ingestion/debug/cleanup-status")
+async def proxy_debug_cleanup_status():
+    """Proxy endpoint to forward cleanup status requests to ingestion service - NO AUTH REQUIRED"""
+    try:
+        print(f"[DEBUG] Proxy debug cleanup status called")
+        
+        # Forward to ingestion service
+        import requests
+        ingestion_url = f"{INGESTION_SERVICE_URL}/debug/cleanup-status"
+        print(f"[DEBUG] Forwarding to: {ingestion_url}")
+        response = requests.get(ingestion_url, timeout=15)
+        print(f"[DEBUG] Proxy cleanup status response status: {response.status_code}")
+        
+        return response.json()
+    except Exception as e:
+        print(f"[ERROR] Proxy cleanup status error: {e}")
+        raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
+
+@app.get("/api/ingestion/debug/cleanup-stats")
+async def proxy_debug_cleanup_stats():
+    """Proxy endpoint to forward cleanup stats requests to ingestion service - NO AUTH REQUIRED"""
+    try:
+        print(f"[DEBUG] Proxy debug cleanup stats called")
+        
+        # Forward to ingestion service
+        import requests
+        ingestion_url = f"{INGESTION_SERVICE_URL}/debug/cleanup-stats"
+        print(f"[DEBUG] Forwarding to: {ingestion_url}")
+        response = requests.get(ingestion_url, timeout=15)
+        print(f"[DEBUG] Proxy cleanup stats response status: {response.status_code}")
+        
+        return response.json()
+    except Exception as e:
+        print(f"[ERROR] Proxy cleanup stats error: {e}")
+        raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 

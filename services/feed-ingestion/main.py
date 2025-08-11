@@ -1093,5 +1093,61 @@ async def get_cleanup_status():
         "note": "Cleanup runs automatically every 3 hours and before each source ingestion"
     }
 
+@app.get("/debug/cleanup-stats")
+async def get_cleanup_stats(db: SessionLocal = Depends(get_db)):
+    """Debug endpoint to show actual cleanup statistics from the database"""
+    try:
+        from datetime import datetime, timedelta
+        
+        # Get current time
+        now = datetime.utcnow()
+        
+        # Calculate time thresholds
+        cutoff_24h = now - timedelta(hours=24)
+        cutoff_48h = now - timedelta(hours=48)
+        cutoff_7d = now - timedelta(days=7)
+        
+        # Count items by age
+        items_24h_old = db.query(FeedItem).filter(FeedItem.created_at < cutoff_24h).count()
+        items_48h_old = db.query(FeedItem).filter(FeedItem.created_at < cutoff_48h).count()
+        items_7d_old = db.query(FeedItem).filter(FeedItem.created_at < cutoff_7d).count()
+        total_items = db.query(FeedItem).count()
+        
+        # Count items by source
+        source_counts = {}
+        sources = db.query(FeedItem.source).distinct().all()
+        for source in sources:
+            if source[0]:
+                source_counts[source[0]] = db.query(FeedItem).filter(FeedItem.source == source[0]).count()
+        
+        # Count items by relevance
+        relevant_items = db.query(FeedItem).filter(FeedItem.is_relevant == True).count()
+        irrelevant_items = db.query(FeedItem).filter(FeedItem.is_relevant == False).count()
+        
+        return {
+            "current_time": now.isoformat(),
+            "item_counts": {
+                "total_items": total_items,
+                "items_older_than_24h": items_24h_old,
+                "items_older_than_48h": items_48h_old,
+                "items_older_than_7d": items_7d_old
+            },
+            "relevance_counts": {
+                "relevant_items": relevant_items,
+                "irrelevant_items": irrelevant_items,
+                "relevance_rate": round(relevant_items / total_items * 100, 1) if total_items > 0 else 0
+            },
+            "source_distribution": source_counts,
+            "cleanup_recommendations": {
+                "should_cleanup_24h": items_24h_old > 0,
+                "should_cleanup_48h": items_48h_old > 0,
+                "should_cleanup_7d": items_7d_old > 0
+            }
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] Cleanup stats error: {e}")
+        return {"error": f"Failed to get cleanup stats: {str(e)}"}
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001) 
