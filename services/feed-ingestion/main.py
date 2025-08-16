@@ -1093,6 +1093,233 @@ async def get_cleanup_status():
         "note": "Cleanup runs automatically every 3 hours and before each source ingestion"
     }
 
+# AI-Assisted Summary API Endpoints
+@app.post("/ai-summary/generate/{user_id}")
+async def generate_ai_summary(
+    user_id: int,
+    max_words: int = 300,
+    db: SessionLocal = Depends(get_db)
+):
+    """Generate an AI-assisted summary for a user's feed items"""
+    try:
+        # Get user's active categories
+        user_categories = db.query(UserCategory).filter(
+            UserCategory.user_id == user_id,
+            UserCategory.is_active == True
+        ).all()
+        
+        if not user_categories:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"No active categories found for user {user_id}"
+            )
+        
+        # Get feed items for user's categories (only relevant items)
+        category_names = [cat.category_name for cat in user_categories]
+        feed_items = db.query(FeedItem).filter(
+            FeedItem.category.in_(category_names),
+            FeedItem.is_relevant == True
+        ).order_by(FeedItem.published_at.desc()).limit(100).all()
+        
+        if not feed_items:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"No relevant feed items found for user {user_id}"
+            )
+        
+        # Group feed items by category
+        category_feed_data = {}
+        for category in user_categories:
+            category_items = [item for item in feed_items if item.category == category.category_name]
+            if category_items:
+                category_feed_data[category.category_name] = [
+                    {
+                        "title": item.title,
+                        "summary": item.summary,
+                        "source": item.source,
+                        "published_at": to_utc_z(item.published_at) if item.published_at else None,
+                        "url": item.url
+                    }
+                    for item in category_items[:20]  # Limit to 20 items per category
+                ]
+        
+        # Create the JSON structure for Perplexity
+        feed_summary_data = {
+            "user_categories": list(category_feed_data.keys()),
+            "feed_items_by_category": category_feed_data
+        }
+        
+        # Generate the prompt for Perplexity
+        prompt = f"""Given this JSON structure that is organized by the topic category and news items on that category, generate a summarization for the user to read as a briefing. The summary should be up to {max_words} words long.
+
+JSON Structure:
+{json.dumps(feed_summary_data, indent=2)}
+
+Please provide a comprehensive yet concise summary that:
+1. Highlights the most important developments across all categories
+2. Identifies any emerging trends or patterns
+3. Provides context for why these items matter
+4. Is written in a professional briefing format
+5. Stays within the {max_words} word limit
+
+Respond with a well-structured summary that flows naturally between topics."""
+        
+        # Call Perplexity API
+        perplexity_api_key = os.getenv("PERPLEXITY_API_KEY")
+        if not perplexity_api_key:
+            raise HTTPException(
+                status_code=500, 
+                detail="PERPLEXITY_API_KEY not configured"
+            )
+        
+        headers = {
+            "Authorization": f"Bearer {perplexity_api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": "sonar",
+            "messages": [
+                {
+                    "role": "system", 
+                    "content": "You are an expert news analyst and briefing writer. Your task is to create concise, informative summaries of news items organized by category. Focus on clarity, relevance, and actionable insights."
+                },
+                {
+                    "role": "user", 
+                    "content": prompt
+                }
+            ],
+            "max_tokens": 1000,
+            "temperature": 0.3
+        }
+        
+        perplexity_url = "https://api.perplexity.ai/chat/completions"
+        response = requests.post(perplexity_url, headers=headers, json=payload, timeout=30)
+        
+        if not response.ok:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Perplexity API error: {response.status_code} - {response.text}"
+            )
+        
+        result = response.json()
+        if "choices" not in result or not result["choices"]:
+            raise HTTPException(
+                status_code=500, 
+                detail="Invalid response from Perplexity API"
+            )
+        
+        summary_content = result["choices"][0]["message"]["content"]
+        
+        # Count actual words in the summary
+        actual_word_count = len(summary_content.split())
+        
+        return {
+            "user_id": user_id,
+            "summary": summary_content,
+            "word_count": actual_word_count,
+            "max_words_requested": max_words,
+            "categories_covered": list(category_feed_data.keys()),
+            "total_feed_items_analyzed": len(feed_items),
+            "generated_at": datetime.utcnow().isoformat(),
+            "source": "Perplexity AI"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Failed to generate AI summary for user {user_id}: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to generate AI summary: {str(e)}"
+        )
+
+@app.get("/ai-summary/status/{user_id}")
+async def get_ai_summary_status(
+    user_id: int,
+    db: SessionLocal = Depends(get_db)
+):
+    """Get the status of AI summary generation for a user"""
+    try:
+        # Get user's active categories
+        user_categories = db.query(UserCategory).filter(
+            UserCategory.user_id == user_id,
+            UserCategory.is_active == True
+        ).all()
+        
+        if not user_categories:
+            return {
+                "user_id": user_id,
+                "status": "no_categories",
+                "message": "User has no active categories",
+                "can_generate_summary": False
+            }
+        
+        # Get feed items for user's categories
+        category_names = [cat.category_name for cat in user_categories]
+        feed_items = db.query(FeedItem).filter(
+            FeedItem.category.in_(category_names),
+            FeedItem.is_relevant == True
+        ).all()
+        
+        if not feed_items:
+            return {
+                "user_id": user_id,
+                "status": "no_feed_items",
+                "message": "No relevant feed items found",
+                "can_generate_summary": False
+            }
+        
+        # Check if we have enough recent items
+        recent_items = [item for item in feed_items 
+                       if item.published_at and 
+                       (datetime.utcnow() - item.published_at).days <= 7]
+        
+        return {
+            "user_id": user_id,
+            "status": "ready",
+            "message": "Ready to generate summary",
+            "can_generate_summary": True,
+            "total_categories": len(user_categories),
+            "total_feed_items": len(feed_items),
+            "recent_feed_items": len(recent_items),
+            "categories": [cat.category_name for cat in user_categories],
+            "last_updated": to_utc_z(max(item.updated_at for item in feed_items)) if feed_items else None
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to get AI summary status for user {user_id}: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to get AI summary status: {str(e)}"
+        )
+
+@app.post("/ai-summary/generate-background/{user_id}")
+async def trigger_ai_summary_generation(
+    user_id: int,
+    max_words: int = 300
+):
+    """Trigger background AI summary generation for a user"""
+    try:
+        # Submit Celery task
+        task = celery_app.send_task(
+            "generate_ai_summary",
+            args=[user_id, max_words]
+        )
+        
+        return {
+            "message": f"AI summary generation started for user {user_id}",
+            "task_id": task.id,
+            "status": "pending",
+            "user_id": user_id,
+            "max_words": max_words
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to start AI summary generation: {str(e)}"
+        )
+
 @app.get("/debug/cleanup-stats")
 async def get_cleanup_stats(db: SessionLocal = Depends(get_db)):
     """Debug endpoint to show actual cleanup statistics from the database"""
@@ -1148,6 +1375,148 @@ async def get_cleanup_stats(db: SessionLocal = Depends(get_db)):
     except Exception as e:
         print(f"[ERROR] Cleanup stats error: {e}")
         return {"error": f"Failed to get cleanup stats: {str(e)}"}
+
+@app.get("/debug/ai-summary-test/{user_id}")
+async def debug_ai_summary_test(
+    user_id: int,
+    max_words: int = 300,
+    wait_for_completion: bool = True,
+    timeout_seconds: int = 60
+):
+    """Debug endpoint: Test AI summary generation with Celery for a specific user"""
+    try:
+        import time
+        
+        print(f"[DEBUG] Starting AI summary test for user {user_id}")
+        
+        # Check if user exists and has categories
+        user_categories = db.query(UserCategory).filter(
+            UserCategory.user_id == user_id,
+            UserCategory.is_active == True
+        ).all()
+        
+        if not user_categories:
+            return {
+                "user_id": user_id,
+                "status": "error",
+                "message": f"No active categories found for user {user_id}",
+                "can_generate_summary": False
+            }
+        
+        # Check if user has feed items
+        category_names = [cat.category_name for cat in user_categories]
+        feed_items = db.query(FeedItem).filter(
+            FeedItem.category.in_(category_names),
+            FeedItem.is_relevant == True
+        ).all()
+        
+        if not feed_items:
+            return {
+                "user_id": user_id,
+                "status": "error",
+                "message": f"No relevant feed items found for user {user_id}",
+                "can_generate_summary": False
+            }
+        
+        # Submit Celery task
+        print(f"[DEBUG] Submitting Celery task for user {user_id}")
+        task = celery_app.send_task(
+            "generate_ai_summary",
+            args=[user_id, max_words]
+        )
+        
+        task_id = task.id
+        print(f"[DEBUG] Celery task submitted with ID: {task_id}")
+        
+        result_data = {
+            "user_id": user_id,
+            "task_id": task_id,
+            "task_status": "submitted",
+            "max_words": max_words,
+            "user_categories": [cat.category_name for cat in user_categories],
+            "total_feed_items": len(feed_items),
+            "categories_with_items": len(set(item.category for item in feed_items)),
+            "submitted_at": datetime.utcnow().isoformat(),
+            "wait_for_completion": wait_for_completion
+        }
+        
+        if not wait_for_completion:
+            return {
+                **result_data,
+                "message": f"AI summary task submitted for user {user_id}. Use task ID {task_id} to check status."
+            }
+        
+        # Wait for completion
+        print(f"[DEBUG] Waiting for task completion (timeout: {timeout_seconds}s)")
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout_seconds:
+            try:
+                task_result = celery_app.AsyncResult(task_id)
+                current_status = task_result.status
+                
+                print(f"[DEBUG] Task {task_id} status: {current_status}")
+                
+                if current_status == "SUCCESS":
+                    # Task completed successfully
+                    task_data = task_result.result
+                    print(f"[DEBUG] Task completed successfully: {task_data}")
+                    
+                    return {
+                        **result_data,
+                        "task_status": "completed",
+                        "completion_time": datetime.utcnow().isoformat(),
+                        "processing_duration_seconds": round(time.time() - start_time, 2),
+                        "result": task_data,
+                        "summary_preview": task_data.get("summary", "")[:200] + "..." if task_data.get("summary") and len(task_data.get("summary", "")) > 200 else task_data.get("summary", "")
+                    }
+                
+                elif current_status == "FAILURE":
+                    # Task failed
+                    error_info = task_result.info if hasattr(task_result, 'info') else "Unknown error"
+                    print(f"[DEBUG] Task failed: {error_info}")
+                    
+                    return {
+                        **result_data,
+                        "task_status": "failed",
+                        "completion_time": datetime.utcnow().isoformat(),
+                        "processing_duration_seconds": round(time.time() - start_time, 2),
+                        "error": str(error_info)
+                    }
+                
+                elif current_status in ["PENDING", "STARTED"]:
+                    # Task still running, wait a bit
+                    time.sleep(2)
+                    continue
+                
+                else:
+                    # Unknown status
+                    print(f"[DEBUG] Unknown task status: {current_status}")
+                    time.sleep(2)
+                    continue
+                    
+            except Exception as e:
+                print(f"[DEBUG] Error checking task status: {e}")
+                time.sleep(2)
+                continue
+        
+        # Timeout reached
+        print(f"[DEBUG] Task timeout reached after {timeout_seconds} seconds")
+        return {
+            **result_data,
+            "task_status": "timeout",
+            "timeout_seconds": timeout_seconds,
+            "message": f"Task did not complete within {timeout_seconds} seconds. Use task ID {task_id} to check status manually."
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] Debug AI summary test failed for user {user_id}: {e}")
+        return {
+            "user_id": user_id,
+            "status": "error",
+            "message": f"Debug test failed: {str(e)}",
+            "error_type": type(e).__name__
+        }
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001) 
