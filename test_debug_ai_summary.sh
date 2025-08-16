@@ -1,20 +1,20 @@
 #!/bin/bash
 
 # Test script for the AI Summary API endpoints
-# Main service runs on port 8000, Ingestion service on port 30101
+# Main service runs on NodePort 30100, Ingestion service on NodePort 30101
 
-MAIN_SERVICE_URL="http://64.227.134.87:8000"
+MAIN_SERVICE_URL="http://64.227.134.87:30100"
 INGESTION_SERVICE_URL="http://64.227.134.87:30101"
 JWT_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbnVwYW13IiwiZXhwIjoxNzU1NDczOTAzfQ.T4rymU0aB5xKrm32G_fvpMsorRs140Hgu08VMs4bwVY"
 
 echo "🧪 Testing AI Summary API Endpoints"
 echo "=================================="
-echo "Main Service URL: $MAIN_SERVICE_URL"
-echo "Ingestion Service URL: $INGESTION_SERVICE_URL"
+echo "Main Service URL: $MAIN_SERVICE_URL (NodePort 30100)"
+echo "Ingestion Service URL: $INGESTION_SERVICE_URL (NodePort 30101)"
 echo ""
 
-echo "🔒 PROTECTED ENDPOINTS (Main Service - Port 8000)"
-echo "================================================="
+echo "🔒 PROTECTED ENDPOINTS (Main Service - NodePort 30100)"
+echo "======================================================"
 echo "These endpoints require a valid JWT token in the Authorization header"
 echo ""
 
@@ -45,8 +45,8 @@ echo ""
 echo "---"
 echo ""
 
-echo "🔓 UNPROTECTED DEBUG ENDPOINT (Ingestion Service - Port 30101)"
-echo "=============================================================="
+echo "🔓 UNPROTECTED DEBUG ENDPOINT (Ingestion Service - NodePort 30101)"
+echo "=================================================================="
 echo "This endpoint is for testing only and doesn't require authentication"
 echo ""
 
@@ -61,8 +61,8 @@ echo ""
 
 echo "📋 SUMMARY"
 echo "=========="
-echo "✅ Main Service (Port 8000): Protected endpoints with JWT authentication"
-echo "✅ Ingestion Service (Port 30101): Debug endpoint for testing (no auth)"
+echo "✅ Main Service (NodePort 30100): Protected endpoints with JWT authentication"
+echo "✅ Ingestion Service (NodePort 30101): Debug endpoint for testing (no auth)"
 echo ""
 echo "🔐 To use protected endpoints:"
 echo "curl -H 'Authorization: Bearer $JWT_TOKEN' '$MAIN_SERVICE_URL/ai-summary/generate?max_words=300'"
@@ -71,5 +71,9 @@ echo "🧪 To test without auth:"
 echo "curl '$INGESTION_SERVICE_URL/debug/ai-summary-test/1'"
 echo ""
 echo "🎯 Architecture:"
-echo "- Production API: Main service (authenticated)"
-echo "- Debug/Testing: Ingestion service (no auth required)"
+echo "- Production API: Main service (authenticated, NodePort 30100)"
+echo "- Debug/Testing: Ingestion service (no auth required, NodePort 30101)"
+echo ""
+echo "📝 Port Mapping:"
+echo "- Main Service: Internal port 8000 → NodePort 30100"
+echo "- Ingestion Service: Internal port 8001 → NodePort 30101"
