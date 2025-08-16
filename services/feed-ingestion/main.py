@@ -8,6 +8,9 @@ import os
 from dotenv import load_dotenv
 import json
 import requests
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import jwt
+from fastapi import status
 
 # Import shared components
 import sys
@@ -20,6 +23,48 @@ from runners.social_runner import SocialRunner
 from runners.newsapi_runner import NewsAPIRunner, router as newsapi_debug_router
 
 load_dotenv()
+
+# Security configuration
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
+ALGORITHM = "HS256"
+security = HTTPBearer()
+
+# Authentication functions
+def get_user_by_username(username: str):
+    """Get user by username from database"""
+    db = SessionLocal()
+    try:
+        user = db.query(UserDB).filter(UserDB.username == username).first()
+        if user:
+            return {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "created_at": user.created_at.isoformat() if user.created_at else None
+            }
+        return None
+    finally:
+        db.close()
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Get current authenticated user"""
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except jwt.PyJWTError:
+        raise credentials_exception
+    
+    user = get_user_by_username(username=username)
+    if user is None:
+        raise credentials_exception
+    return user
 
 app = FastAPI(
     title="Feed Ingestion Service",
@@ -1097,10 +1142,18 @@ async def get_cleanup_status():
 async def generate_ai_summary(
     user_id: int,
     max_words: int = 300,
+    current_user: dict = Depends(get_current_user),
     db: SessionLocal = Depends(get_db)
 ):
     """Generate an AI-assisted summary for a user's feed items"""
     try:
+        # Ensure user can only access their own data
+        if current_user["id"] != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only generate summaries for your own account"
+            )
+        
         # Get user's active categories
         user_categories = db.query(UserCategory).filter(
             UserCategory.user_id == user_id,
@@ -1236,10 +1289,18 @@ Respond with a well-structured summary that flows naturally between topics."""
 @app.get("/ai-summary/status/{user_id}")
 async def get_ai_summary_status(
     user_id: int,
+    current_user: dict = Depends(get_current_user),
     db: SessionLocal = Depends(get_db)
 ):
     """Get the status of AI summary generation for a user"""
     try:
+        # Ensure user can only access their own data
+        if current_user["id"] != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only check summary status for your own account"
+            )
+        
         # Get user's active categories
         user_categories = db.query(UserCategory).filter(
             UserCategory.user_id == user_id,
@@ -1286,6 +1347,8 @@ async def get_ai_summary_status(
             "last_updated": to_utc_z(max(item.updated_at for item in feed_items)) if feed_items else None
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[ERROR] Failed to get AI summary status for user {user_id}: {e}")
         raise HTTPException(
@@ -1296,25 +1359,78 @@ async def get_ai_summary_status(
 @app.post("/ai-summary/generate-background/{user_id}")
 async def trigger_ai_summary_generation(
     user_id: int,
-    max_words: int = 300
+    max_words: int = 300,
+    current_user: dict = Depends(get_current_user)
 ):
     """Generate AI summary for a user (synchronous - Celery integration coming later)"""
     try:
+        # Ensure user can only access their own data
+        if current_user["id"] != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only generate summaries for your own account"
+            )
+        
         # For now, just call the synchronous generation directly
         # This will be replaced with Celery integration later
-        result = await generate_ai_summary(user_id, max_words, get_db().__next__())
-        
-        return {
-            "message": f"AI summary generated for user {user_id}",
-            "status": "completed",
-            "user_id": user_id,
-            "max_words": max_words,
-            "result": result
-        }
+        db = SessionLocal()
+        try:
+            result = await generate_ai_summary(user_id, max_words, current_user, db)
+            
+            return {
+                "message": f"AI summary generated for user {user_id}",
+                "status": "completed",
+                "user_id": user_id,
+                "max_words": max_words,
+                "result": result
+            }
+        finally:
+            db.close()
+            
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500, 
             detail=f"Failed to generate AI summary: {str(e)}"
+        )
+
+@app.post("/ai-summary/generate")
+async def generate_ai_summary_for_current_user(
+    max_words: int = 300,
+    current_user: dict = Depends(get_current_user),
+    db: SessionLocal = Depends(get_db)
+):
+    """Generate AI summary for the currently authenticated user"""
+    try:
+        user_id = current_user["id"]
+        result = await generate_ai_summary(user_id, max_words, current_user, db)
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to generate AI summary: {str(e)}"
+        )
+
+@app.get("/ai-summary/status")
+async def get_ai_summary_status_for_current_user(
+    current_user: dict = Depends(get_current_user),
+    db: SessionLocal = Depends(get_db)
+):
+    """Get the status of AI summary generation for the currently authenticated user"""
+    try:
+        user_id = current_user["id"]
+        return await get_ai_summary_status(user_id, current_user, db)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to get AI summary status: {str(e)}"
         )
 
 @app.get("/debug/cleanup-stats")
