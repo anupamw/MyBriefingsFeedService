@@ -14,7 +14,6 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../'))
 from shared.database.connection import SessionLocal, init_database
 from shared.models.database_models import DataSource, FeedItem, IngestionJob, UserCategory, UserDB
-from celery_app import celery_app
 from runners.perplexity_runner import PerplexityRunner, router as perplexity_debug_router
 from runners.reddit_runner import RedditRunner, router as reddit_debug_router
 from runners.social_runner import SocialRunner
@@ -1299,25 +1298,23 @@ async def trigger_ai_summary_generation(
     user_id: int,
     max_words: int = 300
 ):
-    """Trigger background AI summary generation for a user"""
+    """Generate AI summary for a user (synchronous - Celery integration coming later)"""
     try:
-        # Submit Celery task
-        task = celery_app.send_task(
-            "generate_ai_summary",
-            args=[user_id, max_words]
-        )
+        # For now, just call the synchronous generation directly
+        # This will be replaced with Celery integration later
+        result = await generate_ai_summary(user_id, max_words, get_db().__next__())
         
         return {
-            "message": f"AI summary generation started for user {user_id}",
-            "task_id": task.id,
-            "status": "pending",
+            "message": f"AI summary generated for user {user_id}",
+            "status": "completed",
             "user_id": user_id,
-            "max_words": max_words
+            "max_words": max_words,
+            "result": result
         }
     except Exception as e:
         raise HTTPException(
             status_code=500, 
-            detail=f"Failed to start AI summary generation: {str(e)}"
+            detail=f"Failed to generate AI summary: {str(e)}"
         )
 
 @app.get("/debug/cleanup-stats")
@@ -1383,10 +1380,8 @@ async def debug_ai_summary_test(
     wait_for_completion: bool = True,
     timeout_seconds: int = 60
 ):
-    """Debug endpoint: Test AI summary generation with Celery for a specific user"""
+    """Debug endpoint: Test AI summary generation for a specific user (synchronous - Celery coming later)"""
     try:
-        import time
-        
         print(f"[DEBUG] Starting AI summary test for user {user_id}")
         
         # Check if user exists and has categories
@@ -1418,96 +1413,44 @@ async def debug_ai_summary_test(
                 "can_generate_summary": False
             }
         
-        # Submit Celery task
-        print(f"[DEBUG] Submitting Celery task for user {user_id}")
-        task = celery_app.send_task(
-            "generate_ai_summary",
-            args=[user_id, max_words]
-        )
-        
-        task_id = task.id
-        print(f"[DEBUG] Celery task submitted with ID: {task_id}")
+        # For now, generate summary synchronously
+        # This will be replaced with Celery integration later
+        print(f"[DEBUG] Generating AI summary synchronously for user {user_id}")
         
         result_data = {
             "user_id": user_id,
-            "task_id": task_id,
-            "task_status": "submitted",
+            "task_status": "completed_synchronously",
             "max_words": max_words,
             "user_categories": [cat.category_name for cat in user_categories],
             "total_feed_items": len(feed_items),
             "categories_with_items": len(set(item.category for item in feed_items)),
             "submitted_at": datetime.utcnow().isoformat(),
-            "wait_for_completion": wait_for_completion
+            "note": "Currently running synchronously - Celery integration coming later"
         }
         
         if not wait_for_completion:
             return {
                 **result_data,
-                "message": f"AI summary task submitted for user {user_id}. Use task ID {task_id} to check status."
+                "message": f"AI summary test completed synchronously for user {user_id}."
             }
         
-        # Wait for completion
-        print(f"[DEBUG] Waiting for task completion (timeout: {timeout_seconds}s)")
-        start_time = time.time()
-        
-        while time.time() - start_time < timeout_seconds:
-            try:
-                task_result = celery_app.AsyncResult(task_id)
-                current_status = task_result.status
-                
-                print(f"[DEBUG] Task {task_id} status: {current_status}")
-                
-                if current_status == "SUCCESS":
-                    # Task completed successfully
-                    task_data = task_result.result
-                    print(f"[DEBUG] Task completed successfully: {task_data}")
-                    
-                    return {
-                        **result_data,
-                        "task_status": "completed",
-                        "completion_time": datetime.utcnow().isoformat(),
-                        "processing_duration_seconds": round(time.time() - start_time, 2),
-                        "result": task_data,
-                        "summary_preview": task_data.get("summary", "")[:200] + "..." if task_data.get("summary") and len(task_data.get("summary", "")) > 200 else task_data.get("summary", "")
-                    }
-                
-                elif current_status == "FAILURE":
-                    # Task failed
-                    error_info = task_result.info if hasattr(task_result, 'info') else "Unknown error"
-                    print(f"[DEBUG] Task failed: {error_info}")
-                    
-                    return {
-                        **result_data,
-                        "task_status": "failed",
-                        "completion_time": datetime.utcnow().isoformat(),
-                        "processing_duration_seconds": round(time.time() - start_time, 2),
-                        "error": str(error_info)
-                    }
-                
-                elif current_status in ["PENDING", "STARTED"]:
-                    # Task still running, wait a bit
-                    time.sleep(2)
-                    continue
-                
-                else:
-                    # Unknown status
-                    print(f"[DEBUG] Unknown task status: {current_status}")
-                    time.sleep(2)
-                    continue
-                    
-            except Exception as e:
-                print(f"[DEBUG] Error checking task status: {e}")
-                time.sleep(2)
-                continue
-        
-        # Timeout reached
-        print(f"[DEBUG] Task timeout reached after {timeout_seconds} seconds")
-        return {
-            **result_data,
-            "task_status": "timeout",
-            "timeout_seconds": timeout_seconds,
-            "message": f"Task did not complete within {timeout_seconds} seconds. Use task ID {task_id} to check status manually."
-        }
+        # Generate the summary
+        try:
+            summary_result = await generate_ai_summary(user_id, max_words, db)
+            return {
+                **result_data,
+                "task_status": "completed",
+                "completion_time": datetime.utcnow().isoformat(),
+                "result": summary_result,
+                "summary_preview": summary_result.get("summary", "")[:200] + "..." if summary_result.get("summary") and len(summary_result.get("summary", "")) > 200 else summary_result.get("summary", "")
+            }
+        except Exception as e:
+            return {
+                **result_data,
+                "task_status": "failed",
+                "completion_time": datetime.utcnow().isoformat(),
+                "error": str(e)
+            }
         
     except Exception as e:
         print(f"[ERROR] Debug AI summary test failed for user {user_id}: {e}")
