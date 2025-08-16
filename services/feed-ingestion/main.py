@@ -1378,7 +1378,8 @@ async def debug_ai_summary_test(
     user_id: int,
     max_words: int = 300,
     wait_for_completion: bool = True,
-    timeout_seconds: int = 60
+    timeout_seconds: int = 60,
+    db: SessionLocal = Depends(get_db)
 ):
     """Debug endpoint: Test AI summary generation for a specific user (synchronous - Celery coming later)"""
     try:
