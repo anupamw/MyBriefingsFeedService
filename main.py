@@ -13,7 +13,7 @@ from passlib.context import CryptContext
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, UniqueConstraint, Float, JSON
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, UniqueConstraint, Float, JSON, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 import time
@@ -62,6 +62,7 @@ Base = declarative_base()
 
 # Database models
 class UserDB(Base):
+    """User model (moved from main.py for shared access)"""
     __tablename__ = "users"
     
     id = Column(Integer, primary_key=True, index=True)
@@ -69,6 +70,27 @@ class UserDB(Base):
     email = Column(String(100), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class AISummaryDB(Base):
+    """AI-generated summaries for users"""
+    __tablename__ = "ai_summaries"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    summary_content = Column(Text, nullable=False)
+    word_count = Column(Integer, nullable=False)
+    max_words_requested = Column(Integer, nullable=False)
+    categories_covered = Column(JSON)  # Array of category names
+    total_feed_items_analyzed = Column(Integer, nullable=False)
+    generated_at = Column(DateTime, default=datetime.utcnow)
+    source = Column(String(100), default="Perplexity AI")
+    is_active = Column(Boolean, default=True)  # For soft deletion
+    
+    # Index for quick user lookups
+    __table_args__ = (
+        Index('idx_ai_summaries_user_id', 'user_id'),
+        Index('idx_ai_summaries_generated_at', 'generated_at'),
+    )
 
 class FeedItemDB(Base):
     __tablename__ = "feed_items"
@@ -683,6 +705,80 @@ async def root():
                 word-wrap: break-word;
                 overflow-wrap: break-word;
             }
+            
+            /* AI Summary Banner Styles */
+            .ai-summary-banner {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border-radius: 20px;
+                padding: 25px;
+                margin-bottom: 20px;
+                box-shadow: 0 8px 25px rgba(102, 126, 234, 0.15);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                color: white;
+                position: relative;
+                overflow: hidden;
+            }
+            
+            .ai-summary-banner::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+                pointer-events: none;
+            }
+            
+            .ai-summary-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                margin-bottom: 15px;
+                position: relative;
+                z-index: 1;
+            }
+            
+            .ai-summary-title {
+                font-size: 1.3em;
+                font-weight: 600;
+            }
+            
+            .ai-summary-controls {
+                display: flex;
+                gap: 8px;
+            }
+            
+            .ai-summary-content {
+                position: relative;
+                z-index: 1;
+            }
+            
+            .ai-summary-content.collapsed {
+                display: none;
+            }
+            
+            .ai-summary-text {
+                font-size: 1.05em;
+                line-height: 1.6;
+                margin-bottom: 15px;
+            }
+            
+            .ai-summary-meta {
+                font-size: 0.9em;
+                opacity: 0.9;
+                border-top: 1px solid rgba(255, 255, 255, 0.2);
+                padding-top: 10px;
+            }
+            
+            .ai-summary-banner button {
+                transition: all 0.2s;
+            }
+            
+            .ai-summary-banner button:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            }
         </style>
     </head>
     <body>
@@ -752,6 +848,34 @@ async def root():
                 </div>
                 
                 <div class="feed-content">
+                    <!-- AI Summary Banner -->
+                    <div id="ai-summary-banner" class="ai-summary-banner" style="display: none;">
+                        <div class="ai-summary-header">
+                            <div class="ai-summary-title">
+                                <span style="font-size: 1.2em; margin-right: 10px;">🤖</span>
+                                <strong>AI Intelligence Briefing</strong>
+                                <span id="ai-summary-status" style="font-size: 0.9em; color: #666; margin-left: 10px;"></span>
+                            </div>
+                            <div class="ai-summary-controls">
+                                <button id="ai-summary-toggle" onclick="toggleAISummary()" style="background: #6c757d; color: white; border: none; border-radius: 4px; padding: 4px 8px; font-size: 0.8em; cursor: pointer; margin-right: 8px;">Collapse</button>
+                                <button id="ai-summary-refresh" onclick="refreshAISummary()" style="background: #a8d5ba; color: #2c3e50; border: none; border-radius: 4px; padding: 4px 8px; font-size: 0.8em; cursor: pointer;">🔄 Refresh</button>
+                            </div>
+                        </div>
+                        <div id="ai-summary-content" class="ai-summary-content">
+                            <div id="ai-summary-loading" style="display: none; text-align: center; padding: 20px; color: #666;">
+                                <div style="margin-bottom: 10px;">🤖 Generating AI Summary...</div>
+                                <div style="font-size: 0.9em;">This may take a few moments</div>
+                            </div>
+                            <div id="ai-summary-text" style="display: none; line-height: 1.6; color: #333; margin-bottom: 15px;"></div>
+                            <div id="ai-summary-meta" style="display: none; font-size: 0.9em; color: #666; border-top: 1px solid #e9ecef; padding-top: 10px;">
+                                <span id="ai-summary-categories"></span> • 
+                                <span id="ai-summary-words"></span> words • 
+                                <span id="ai-summary-time"></span> • 
+                                <span id="ai-summary-source"></span>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div id="feed-items"></div>
                     <div id="pagination-controls" style="display:flex;justify-content:center;gap:10px;margin-top:20px;"></div>
                 </div>
@@ -1494,9 +1618,145 @@ async def root():
                 }
             }
 
+            // AI Summary Functions
+            let aiSummaryCollapsed = false;
 
+            async function loadAISummary() {
+                const token = localStorage.getItem('token');
+                if (!token) return;
 
+                try {
+                    // Show the banner first
+                    document.getElementById('ai-summary-banner').style.display = 'block';
+                    
+                    // Try to get existing summary
+                    const response = await fetch('/ai-summary/latest', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.has_summary) {
+                            displayAISummary(data.summary);
+                        } else {
+                            // No existing summary, generate one
+                            await generateAISummary();
+                        }
+                    } else {
+                        // Error getting summary, generate new one
+                        await generateAISummary();
+                    }
+                } catch (error) {
+                    console.error('Error loading AI summary:', error);
+                    // Show error state but keep banner visible
+                    document.getElementById('ai-summary-status').textContent = 'Error loading summary';
+                }
+            }
 
+            async function generateAISummary() {
+                const token = localStorage.getItem('token');
+                if (!token) return;
+
+                try {
+                    // Show loading state
+                    document.getElementById('ai-summary-loading').style.display = 'block';
+                    document.getElementById('ai-summary-text').style.display = 'none';
+                    document.getElementById('ai-summary-meta').style.display = 'none';
+                    document.getElementById('ai-summary-status').textContent = 'Generating...';
+
+                    const response = await fetch('/ai-summary/generate-and-store', {
+                        method: 'POST',
+                        headers: { 
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        displayAISummary(data);
+                        document.getElementById('ai-summary-status').textContent = 'Generated just now';
+                    } else {
+                        const errorData = await response.json();
+                        throw new Error(errorData.detail || 'Failed to generate summary');
+                    }
+                } catch (error) {
+                    console.error('Error generating AI summary:', error);
+                    document.getElementById('ai-summary-status').textContent = 'Generation failed';
+                    document.getElementById('ai-summary-loading').style.display = 'none';
+                }
+            }
+
+            function displayAISummary(summaryData) {
+                // Hide loading
+                document.getElementById('ai-summary-loading').style.display = 'none';
+                
+                // Show summary content
+                const summaryText = document.getElementById('ai-summary-text');
+                summaryText.style.display = 'block';
+                summaryText.innerHTML = escapeHtml(summaryData.summary_content || summaryData.summary);
+                
+                // Show meta information
+                const metaDiv = document.getElementById('ai-summary-meta');
+                metaDiv.style.display = 'block';
+                
+                document.getElementById('ai-summary-categories').textContent = 
+                    (summaryData.categories_covered || []).join(', ') || 'All categories';
+                document.getElementById('ai-summary-words').textContent = 
+                    summaryData.word_count || 'Unknown';
+                document.getElementById('ai-summary-time').textContent = 
+                    formatTime(summaryData.generated_at);
+                document.getElementById('ai-summary-source').textContent = 
+                    summaryData.source || 'Perplexity AI';
+            }
+
+            function toggleAISummary() {
+                const content = document.getElementById('ai-summary-content');
+                const toggleBtn = document.getElementById('ai-summary-toggle');
+                
+                if (aiSummaryCollapsed) {
+                    content.classList.remove('collapsed');
+                    toggleBtn.textContent = 'Collapse';
+                    aiSummaryCollapsed = false;
+                } else {
+                    content.classList.add('collapsed');
+                    toggleBtn.textContent = 'Expand';
+                    aiSummaryCollapsed = false;
+                }
+            }
+
+            async function refreshAISummary() {
+                await generateAISummary();
+            }
+
+            function formatTime(isoString) {
+                if (!isoString) return 'Unknown';
+                try {
+                    const date = new Date(isoString);
+                    const now = new Date();
+                    const diffMs = now - date;
+                    const diffMins = Math.floor(diffMs / 60000);
+                    const diffHours = Math.floor(diffMs / 3600000);
+                    const diffDays = Math.floor(diffMs / 86400000);
+                    
+                    if (diffMins < 1) return 'Just now';
+                    if (diffMins < 60) return `${diffMins}m ago`;
+                    if (diffHours < 24) return `${diffHours}h ago`;
+                    if (diffDays < 7) return `${diffDays}d ago`;
+                    
+                    return date.toLocaleDateString();
+                } catch (e) {
+                    return 'Unknown';
+                }
+            }
+
+            // Modify showFeed to also load AI summary
+            const originalShowFeed = showFeed;
+            async function showFeed(offset = 0, categoryFilter = null) {
+                await originalShowFeed(offset, categoryFilter);
+                // Load AI summary after feed is loaded
+                await loadAISummary();
+            }
 
         </script>
     </body>
@@ -2708,7 +2968,7 @@ async def debug_cleanup_status():
             "Reddit",
             "Social Media"
         ],
-        "note": "Cleanup runs automatically every 3 hours and before each source ingestion"
+        "note": "Currently running synchronously - Celery integration coming later"
     }
 
 @app.get("/debug/cleanup-stats")
@@ -2977,6 +3237,285 @@ async def get_ai_summary_status_for_current_user(
         raise HTTPException(
             status_code=500, 
             detail=f"Failed to get AI summary status: {str(e)}"
+        )
+    finally:
+        db.close()
+
+# AI Summary Storage and Retrieval API
+@app.post("/ai-summary/store")
+async def store_ai_summary(
+    summary_data: dict,
+    current_user: dict = Depends(get_current_user),
+    db: SessionLocal = Depends(get_db)
+):
+    """Store an AI-generated summary in the database"""
+    try:
+        user_id = current_user["id"]
+        
+        # Create new AI summary record
+        ai_summary = AISummaryDB(
+            user_id=user_id,
+            summary_content=summary_data.get("summary", ""),
+            word_count=summary_data.get("word_count", 0),
+            max_words_requested=summary_data.get("max_words_requested", 300),
+            categories_covered=summary_data.get("categories_covered", []),
+            total_feed_items_analyzed=summary_data.get("total_feed_items_analyzed", 0),
+            source=summary_data.get("source", "Perplexity AI")
+        )
+        
+        db.add(ai_summary)
+        db.commit()
+        db.refresh(ai_summary)
+        
+        return {
+            "message": "AI summary stored successfully",
+            "summary_id": ai_summary.id,
+            "user_id": user_id,
+            "generated_at": ai_summary.generated_at.isoformat()
+        }
+        
+    except Exception as e:
+        db.rollback()
+        print(f"[ERROR] Failed to store AI summary for user {current_user['id']}: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to store AI summary: {str(e)}"
+        )
+    finally:
+        db.close()
+
+@app.get("/ai-summary/latest")
+async def get_latest_ai_summary(
+    current_user: dict = Depends(get_current_user),
+    db: SessionLocal = Depends(get_db)
+):
+    """Get the latest AI summary for the current user"""
+    try:
+        user_id = current_user["id"]
+        
+        # Get the most recent active summary for this user
+        latest_summary = db.query(AISummaryDB).filter(
+            AISummaryDB.user_id == user_id,
+            AISummaryDB.is_active == True
+        ).order_by(AISummaryDB.generated_at.desc()).first()
+        
+        if not latest_summary:
+            return {
+                "user_id": user_id,
+                "has_summary": False,
+                "message": "No AI summary available for this user"
+            }
+        
+        return {
+            "user_id": user_id,
+            "has_summary": True,
+            "summary": {
+                "id": latest_summary.id,
+                "summary_content": latest_summary.summary_content,
+                "word_count": latest_summary.word_count,
+                "max_words_requested": latest_summary.max_words_requested,
+                "categories_covered": latest_summary.categories_covered,
+                "total_feed_items_analyzed": latest_summary.total_feed_items_analyzed,
+                "generated_at": latest_summary.generated_at.isoformat(),
+                "source": latest_summary.source
+            }
+        }
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to get latest AI summary for user {current_user['id']}: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to get latest AI summary: {str(e)}"
+        )
+    finally:
+        db.close()
+
+# Trigger AI summary generation when new feed items are added
+def trigger_ai_summary_generation_for_user(user_id: int, db: Session):
+    """Background function to generate AI summary when new feed items are added"""
+    try:
+        # Check if user has active categories and feed items
+        user_categories = db.query(UserCategoryDB).filter(
+            UserCategoryDB.user_id == user_id,
+            UserCategoryDB.is_active == True
+        ).all()
+        
+        if not user_categories:
+            return
+        
+        category_names = [cat.category_name for cat in user_categories]
+        feed_items = db.query(FeedItemDB).filter(
+            FeedItemDB.category.in_(category_names),
+            FeedItemDB.is_relevant == True
+        ).all()
+        
+        if len(feed_items) < 5:  # Only generate if there are enough items
+            return
+        
+        # Generate summary using existing logic
+        # This will be called from the feed update functions
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to trigger AI summary generation for user {user_id}: {e}")
+
+# Modified AI Summary Generation with Auto-Storage
+@app.post("/ai-summary/generate-and-store")
+async def generate_and_store_ai_summary(
+    max_words: int = 300,
+    current_user: dict = Depends(get_current_user),
+    db: SessionLocal = Depends(get_db)
+):
+    """Generate an AI-assisted summary and store it in the database"""
+    try:
+        user_id = current_user["id"]
+        
+        # Get user's active categories
+        user_categories = db.query(UserCategoryDB).filter(
+            UserCategoryDB.user_id == user_id,
+            UserCategoryDB.is_active == True
+        ).all()
+        
+        if not user_categories:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"No active categories found for user {user_id}"
+            )
+        
+        # Get feed items for user's categories (only relevant items)
+        category_names = [cat.category_name for cat in user_categories]
+        feed_items = db.query(FeedItemDB).filter(
+            FeedItemDB.category.in_(category_names),
+            FeedItemDB.is_relevant == True
+        ).order_by(FeedItemDB.published_at.desc()).limit(100).all()
+        
+        if not feed_items:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"No relevant feed items found for user {user_id}"
+            )
+        
+        # Group feed items by category
+        category_feed_data = {}
+        for category in user_categories:
+            category_items = [item for item in feed_items if item.category == category.category_name]
+            if category_items:
+                category_feed_data[category.category_name] = [
+                    {
+                        "title": item.title,
+                        "summary": item.summary,
+                        "source": item.source,
+                        "published_at": to_utc_z(item.published_at) if item.published_at else None,
+                        "url": item.url
+                    }
+                    for item in category_items[:20]  # Limit to 20 items per category
+                ]
+        
+        # Create the JSON structure for Perplexity
+        feed_summary_data = {
+            "user_categories": list(category_feed_data.keys()),
+            "feed_items_by_category": category_feed_data
+        }
+        
+        # Generate the prompt for Perplexity
+        prompt = f"""Given this JSON structure that is organized by the topic category and news items on that category, generate a summarization for the user to read as a briefing. The summary should be up to {max_words} words long.
+
+JSON Structure:
+{json.dumps(feed_summary_data, indent=2)}
+
+Please provide a comprehensive yet concise summary that:
+1. Highlights the most important developments across all categories
+2. Identifies any emerging trends or patterns
+3. Provides context for why these items matter
+4. Is written in a professional briefing format
+5. Stays within the {max_words} word limit
+
+Respond with a well-structured summary that flows naturally between topics."""
+        
+        # Call Perplexity API
+        perplexity_api_key = os.getenv("PERPLEXITY_API_KEY")
+        if not perplexity_api_key:
+            raise HTTPException(
+                status_code=500, 
+                detail="PERPLEXITY_API_KEY not configured"
+            )
+        
+        headers = {
+            "Authorization": f"Bearer {perplexity_api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": "sonar",
+            "messages": [
+                {
+                    "role": "system", 
+                    "content": "You are an expert news analyst and briefing writer. Your task is to create concise, informative summaries of news items organized by category. Focus on clarity, relevance, and actionable insights."
+                },
+                {
+                    "role": "user", 
+                    "content": prompt
+                }
+            ],
+            "max_tokens": 1000,
+            "temperature": 0.3
+        }
+        
+        perplexity_url = "https://api.perplexity.ai/chat/completions"
+        response = requests.post(perplexity_url, headers=headers, json=payload, timeout=30)
+        
+        if not response.ok:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Perplexity API error: {response.status_code} - {response.text}"
+            )
+        
+        result = response.json()
+        if "choices" not in result or not result["choices"]:
+            raise HTTPException(
+                status_code=500, 
+                detail="Invalid response from Perplexity API"
+            )
+        
+        summary_content = result["choices"][0]["message"]["content"]
+        
+        # Count actual words in the summary
+        actual_word_count = len(summary_content.split())
+        
+        # Store the summary in the database
+        ai_summary = AISummaryDB(
+            user_id=user_id,
+            summary_content=summary_content,
+            word_count=actual_word_count,
+            max_words_requested=max_words,
+            categories_covered=list(category_feed_data.keys()),
+            total_feed_items_analyzed=len(feed_items),
+            source="Perplexity AI"
+        )
+        
+        db.add(ai_summary)
+        db.commit()
+        db.refresh(ai_summary)
+        
+        return {
+            "message": "AI summary generated and stored successfully",
+            "summary_id": ai_summary.id,
+            "user_id": user_id,
+            "summary": summary_content,
+            "word_count": actual_word_count,
+            "max_words_requested": max_words,
+            "categories_covered": list(category_feed_data.keys()),
+            "total_feed_items_analyzed": len(feed_items),
+            "generated_at": ai_summary.generated_at.isoformat(),
+            "source": "Perplexity AI"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Failed to generate and store AI summary for user {current_user['id']}: {e}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to generate and store AI summary: {str(e)}"
         )
     finally:
         db.close()
