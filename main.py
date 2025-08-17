@@ -1622,27 +1622,40 @@ async def root():
             let aiSummaryCollapsed = false;
 
             async function loadAISummary() {
+                console.log('loadAISummary called');
                 const token = localStorage.getItem('token');
-                if (!token) return;
+                console.log('Token found:', !!token);
+                if (!token) {
+                    console.log('No token, returning early');
+                    return;
+                }
 
                 try {
+                    console.log('Showing banner...');
                     // Show the banner first
                     document.getElementById('ai-summary-banner').style.display = 'block';
+                    console.log('Banner should now be visible');
                     
                     // Try to get existing summary
+                    console.log('Fetching latest summary...');
                     const response = await fetch('/ai-summary/latest', {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });
+                    console.log('Response status:', response.status);
                     
                     if (response.ok) {
                         const data = await response.json();
+                        console.log('Response data:', data);
                         if (data.has_summary) {
+                            console.log('Displaying existing summary');
                             displayAISummary(data.summary);
                         } else {
+                            console.log('No existing summary, generating new one');
                             // No existing summary, generate one
                             await generateAISummary();
                         }
                     } else {
+                        console.log('Error response, generating new summary');
                         // Error getting summary, generate new one
                         await generateAISummary();
                     }
@@ -1753,9 +1766,12 @@ async def root():
             // Modify showFeed to also load AI summary
             const originalShowFeed = showFeed;
             async function showFeed(offset = 0, categoryFilter = null) {
+                console.log('Modified showFeed called with offset:', offset, 'categoryFilter:', categoryFilter);
                 await originalShowFeed(offset, categoryFilter);
+                console.log('Original showFeed completed, now loading AI summary...');
                 // Load AI summary after feed is loaded
                 await loadAISummary();
+                console.log('AI summary loading completed');
             }
 
         </script>
