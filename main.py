@@ -81,6 +81,7 @@ class FeedItemDB(Base):
     source = Column(String(100))
     published_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     category = Column(String(100))  # Add category field
     
     # AI filtering results

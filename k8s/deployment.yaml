@@ -30,6 +30,11 @@ spec:
           value: "your-super-secret-key-change-this-in-production"
         - name: INGESTION_SERVICE_URL
           value: "http://my-briefings-ingestion-service:8001"
+        - name: PERPLEXITY_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: api-secrets
+              key: perplexity-api-key
         resources:
           requests:
             memory: "128Mi"
