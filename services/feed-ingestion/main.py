@@ -19,6 +19,9 @@ from runners.reddit_runner import RedditRunner, router as reddit_debug_router
 from runners.social_runner import SocialRunner
 from runners.newsapi_runner import NewsAPIRunner, router as newsapi_debug_router
 
+# Import Celery app for task management
+from celery_app import celery_app
+
 load_dotenv()
 
 app = FastAPI(
