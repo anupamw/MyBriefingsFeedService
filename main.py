@@ -13,7 +13,7 @@ from passlib.context import CryptContext
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, UniqueConstraint, Float
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, UniqueConstraint, Float, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 import time
@@ -97,6 +97,11 @@ class UserCategoryDB(Base):
     subreddits = Column(Text, nullable=True)  # JSON string
     twitter = Column(Text, nullable=True)     # JSON string
     created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Category preferences
+    keywords = Column(JSON)  # Array of keywords for this category
+    sources = Column(JSON)  # Preferred sources for this category
+    is_active = Column(Boolean, default=True)
     
     __table_args__ = (
         # Ensure unique combination of user_id and category_name
