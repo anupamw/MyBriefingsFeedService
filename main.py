@@ -1734,7 +1734,7 @@ async def root():
                 } else {
                     content.classList.add('collapsed');
                     toggleBtn.textContent = 'Expand';
-                    aiSummaryCollapsed = false;
+                    aiSummaryCollapsed = true;
                 }
             }
 
