@@ -1763,16 +1763,18 @@ async def root():
                 }
             }
 
-            // Modify showFeed to also load AI summary
+            // Store the original showFeed function before overriding
             const originalShowFeed = showFeed;
-            async function showFeed(offset = 0, categoryFilter = null) {
+            
+            // Override showFeed to also load AI summary
+            showFeed = async function(offset = 0, categoryFilter = null) {
                 console.log('Modified showFeed called with offset:', offset, 'categoryFilter:', categoryFilter);
                 await originalShowFeed(offset, categoryFilter);
                 console.log('Original showFeed completed, now loading AI summary...');
                 // Load AI summary after feed is loaded
                 await loadAISummary();
                 console.log('AI summary loading completed');
-            }
+            };
 
         </script>
     </body>
