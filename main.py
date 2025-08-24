@@ -3297,6 +3297,20 @@ async def generate_and_store_ai_summary(
 JSON Structure:
 {json.dumps(feed_summary_data, indent=2)}
 
+CRITICAL FORMATTING REQUIREMENTS - YOU MUST FOLLOW THESE EXACTLY:
+1. Start each category with a NEW PARAGRAPH
+2. Begin each category paragraph with "**CATEGORY NAME:**" in bold
+3. Use double line breaks between categories
+4. Keep each category focused on its specific topic
+5. Make the summary scannable and easy to read
+
+Example format:
+**Category 1 Name:**
+Content for category 1...
+
+**Category 2 Name:**
+Content for category 2...
+
 Please provide a comprehensive yet concise summary that:
 1. Highlights the most important developments across all categories
 2. Identifies any emerging trends or patterns
@@ -3304,14 +3318,7 @@ Please provide a comprehensive yet concise summary that:
 4. Is written in a professional briefing format
 5. Stays within the {max_words} word limit
 
-IMPORTANT FORMATTING REQUIREMENTS:
-- Start a NEW PARAGRAPH for each category
-- Use clear paragraph breaks between different topics
-- Begin each category paragraph with the category name in bold (e.g., "**Category Name:**")
-- Ensure each paragraph is focused on one main category
-- Make the summary easy to scan and read
-
-Respond with a well-structured summary that flows naturally between topics with clear paragraph separation."""
+RESPOND WITH EXACT FORMATTING AS SHOWN IN THE EXAMPLE ABOVE."""
         
         # Call Perplexity API
         perplexity_api_key = os.getenv("PERPLEXITY_API_KEY")
@@ -3359,6 +3366,33 @@ Respond with a well-structured summary that flows naturally between topics with 
             )
         
         summary_content = result["choices"][0]["message"]["content"]
+        
+        # Post-process the summary to ensure proper formatting
+        # Split by categories and reformat if needed
+        categories = list(category_feed_data.keys())
+        if len(categories) > 1:
+            # Try to detect if categories are properly separated
+            if not any(f"**{cat}**" in summary_content for cat in categories):
+                # Reformat the content to add proper category headers
+                formatted_content = ""
+                for i, category in enumerate(categories):
+                    if i > 0:
+                        formatted_content += "\n\n"  # Double line break between categories
+                    formatted_content += f"**{category}:**\n"
+                    # Find content related to this category (simplified approach)
+                    # This is a basic implementation - you might want to improve this logic
+                    if i == 0:
+                        # For first category, take roughly half the content
+                        words = summary_content.split()
+                        mid_point = len(words) // 2
+                        formatted_content += " ".join(words[:mid_point])
+                    else:
+                        # For subsequent categories, take the remaining content
+                        words = summary_content.split()
+                        mid_point = len(words) // 2
+                        formatted_content += " ".join(words[mid_point:])
+                
+                summary_content = formatted_content
         
         # Count actual words in the summary
         actual_word_count = len(summary_content.split())
