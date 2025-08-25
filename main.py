@@ -762,6 +762,11 @@ async def root():
                 font-size: 1.05em;
                 line-height: 1.6;
                 margin-bottom: 15px;
+                white-space: pre-line; /* Preserve line breaks */
+            }
+            
+            .ai-summary-text br {
+                margin-bottom: 8px; /* Add space after line breaks */
             }
             
             .ai-summary-meta {
@@ -1707,7 +1712,23 @@ async def root():
                 // Show summary content
                 const summaryText = document.getElementById('ai-summary-text');
                 summaryText.style.display = 'block';
-                summaryText.innerHTML = escapeHtml(summaryData.summary_content || summaryData.summary);
+                
+                // Process the summary content to handle line breaks properly
+                let content = summaryData.summary_content || summaryData.summary;
+                
+                // Convert \n to <br> tags for proper HTML line breaks
+                content = content.replace(/\n/g, '<br>');
+                
+                // Ensure double line breaks between categories for better readability
+                content = content.replace(/<br><br>/g, '<br><br><br>');
+                
+                // Escape HTML to prevent XSS, but preserve <br> tags
+                content = escapeHtml(content);
+                
+                // Restore <br> tags after escaping
+                content = content.replace(/&lt;br&gt;/g, '<br>');
+                
+                summaryText.innerHTML = content;
                 
                 // Show meta information
                 const metaDiv = document.getElementById('ai-summary-meta');
