@@ -3371,28 +3371,45 @@ RESPOND WITH EXACT FORMATTING AS SHOWN IN THE EXAMPLE ABOVE."""
         # Split by categories and reformat if needed
         categories = list(category_feed_data.keys())
         if len(categories) > 1:
-            # Try to detect if categories are properly separated
-            if not any(f"**{cat}**" in summary_content for cat in categories):
-                # Reformat the content to add proper category headers
-                formatted_content = ""
-                for i, category in enumerate(categories):
-                    if i > 0:
-                        formatted_content += "\n\n"  # Double line break between categories
-                    formatted_content += f"**{category}:**\n"
-                    # Find content related to this category (simplified approach)
-                    # This is a basic implementation - you might want to improve this logic
-                    if i == 0:
-                        # For first category, take roughly half the content
-                        words = summary_content.split()
-                        mid_point = len(words) // 2
-                        formatted_content += " ".join(words[:mid_point])
-                    else:
-                        # For subsequent categories, take the remaining content
-                        words = summary_content.split()
-                        mid_point = len(words) // 2
-                        formatted_content += " ".join(words[mid_point:])
-                
-                summary_content = formatted_content
+            # Clean up any duplicate or malformed category headers
+            summary_content = summary_content.replace("** **", "**")  # Fix double asterisks
+            summary_content = summary_content.replace("**: **", ":**")  # Fix malformed headers
+            
+            # Remove duplicate category headers
+            for category in categories:
+                # Find all instances of this category header
+                header_pattern = f"**{category}:**"
+                if summary_content.count(header_pattern) > 1:
+                    # Keep only the first occurrence
+                    first_pos = summary_content.find(header_pattern)
+                    if first_pos != -1:
+                        # Remove subsequent occurrences
+                        remaining_content = summary_content[first_pos + len(header_pattern):]
+                        # Find next category header or end
+                        next_header_pos = -1
+                        for other_cat in categories:
+                            if other_cat != category:
+                                other_header = f"**{other_cat}:**"
+                                pos = remaining_content.find(other_header)
+                                if pos != -1 and (next_header_pos == -1 or pos < next_header_pos):
+                                    next_header_pos = pos
+                        
+                        if next_header_pos != -1:
+                            # Keep content up to next category
+                            summary_content = summary_content[:first_pos + len(header_pattern)] + remaining_content[:next_header_pos]
+                        else:
+                            # Keep content up to end
+                            summary_content = summary_content[:first_pos + len(header_pattern)] + remaining_content
+            
+            # Ensure proper spacing between categories
+            for category in categories:
+                header_pattern = f"**{category}:**"
+                if header_pattern in summary_content:
+                    # Ensure there's a newline before each category header (except the first)
+                    if not summary_content.startswith(header_pattern):
+                        summary_content = summary_content.replace(header_pattern, f"\n\n{header_pattern}")
+                        # Remove any double newlines
+                        summary_content = summary_content.replace("\n\n\n", "\n\n")
         
         # Count actual words in the summary
         actual_word_count = len(summary_content.split())
