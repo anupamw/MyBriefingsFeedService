@@ -1717,7 +1717,9 @@ async def root():
                 let content = summaryData.summary_content || summaryData.summary;
                 
                 // Convert newlines to <br> tags for proper HTML line breaks
-                content = content.split('\n').join('<br>');
+                // Using String.fromCharCode(10) to avoid escape sequence issues
+                const newlineChar = String.fromCharCode(10);
+                content = content.split(newlineChar).join('<br>');
                 
                 // Ensure double line breaks between categories for better readability
                 content = content.split('<br><br>').join('<br><br><br>');
