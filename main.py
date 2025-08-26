@@ -1716,7 +1716,7 @@ async def root():
                 // Process the summary content to handle line breaks properly
                 let content = summaryData.summary_content || summaryData.summary;
                 
-                // Convert \n to <br> tags for proper HTML line breaks
+                // Convert newlines to <br> tags for proper HTML line breaks
                 content = content.replace(/\n/g, '<br>');
                 
                 // Ensure double line breaks between categories for better readability
