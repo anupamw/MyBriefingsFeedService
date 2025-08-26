@@ -1717,16 +1717,16 @@ async def root():
                 let content = summaryData.summary_content || summaryData.summary;
                 
                 // Convert newlines to <br> tags for proper HTML line breaks
-                content = content.replace(/\n/g, '<br>');
+                content = content.split('\n').join('<br>');
                 
                 // Ensure double line breaks between categories for better readability
-                content = content.replace(/<br><br>/g, '<br><br><br>');
+                content = content.split('<br><br>').join('<br><br><br>');
                 
                 // Escape HTML to prevent XSS, but preserve <br> tags
                 content = escapeHtml(content);
                 
                 // Restore <br> tags after escaping
-                content = content.replace(/&lt;br&gt;/g, '<br>');
+                content = content.split('&lt;br&gt;').join('<br>');
                 
                 summaryText.innerHTML = content;
                 
