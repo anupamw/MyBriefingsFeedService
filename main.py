@@ -3346,10 +3346,13 @@ RESPOND WITH EXACT FORMATTING AS SHOWN IN THE EXAMPLE ABOVE."""
         # Call Perplexity API
         perplexity_api_key = os.getenv("PERPLEXITY_API_KEY")
         if not perplexity_api_key:
+            print(f"[ERROR] PERPLEXITY_API_KEY not configured for user {user_id}")
             raise HTTPException(
                 status_code=500, 
                 detail="PERPLEXITY_API_KEY not configured"
             )
+        
+        print(f"[DEBUG] Using Perplexity API key: {perplexity_api_key[:10]}... for user {user_id}")
         
         headers = {
             "Authorization": f"Bearer {perplexity_api_key}",
@@ -3392,47 +3395,55 @@ RESPOND WITH EXACT FORMATTING AS SHOWN IN THE EXAMPLE ABOVE."""
         
         # Post-process the summary to ensure proper formatting
         # Split by categories and reformat if needed
-        categories = list(category_feed_data.keys())
-        if len(categories) > 1:
-            # Clean up any duplicate or malformed category headers
-            summary_content = summary_content.replace("** **", "**")  # Fix double asterisks
-            summary_content = summary_content.replace("**: **", ":**")  # Fix malformed headers
-            
-            # Remove duplicate category headers
-            for category in categories:
-                # Find all instances of this category header
-                header_pattern = f"**{category}:**"
-                if summary_content.count(header_pattern) > 1:
-                    # Keep only the first occurrence
-                    first_pos = summary_content.find(header_pattern)
-                    if first_pos != -1:
-                        # Remove subsequent occurrences
-                        remaining_content = summary_content[first_pos + len(header_pattern):]
-                        # Find next category header or end
-                        next_header_pos = -1
-                        for other_cat in categories:
-                            if other_cat != category:
-                                other_header = f"**{other_cat}:**"
-                                pos = remaining_content.find(other_header)
-                                if pos != -1 and (next_header_pos == -1 or pos < next_header_pos):
-                                    next_header_pos = pos
-                        
-                        if next_header_pos != -1:
-                            # Keep content up to next category
-                            summary_content = summary_content[:first_pos + len(header_pattern)] + remaining_content[:next_header_pos]
-                        else:
-                            # Keep content up to end
-                            summary_content = summary_content[:first_pos + len(header_pattern)] + remaining_content
-            
-            # Ensure proper spacing between categories
-            for category in categories:
-                header_pattern = f"**{category}:**"
-                if header_pattern in summary_content:
-                    # Ensure there's a newline before each category header (except the first)
-                    if not summary_content.startswith(header_pattern):
-                        summary_content = summary_content.replace(header_pattern, f"\n\n{header_pattern}")
-                        # Remove any double newlines
-                        summary_content = summary_content.replace("\n\n\n", "\n\n")
+        try:
+            categories = list(category_feed_data.keys())
+            if len(categories) > 1:
+                print(f"[DEBUG] Post-processing summary for {len(categories)} categories: {categories}")
+                # Clean up any duplicate or malformed category headers
+                summary_content = summary_content.replace("** **", "**")  # Fix double asterisks
+                summary_content = summary_content.replace("**: **", ":**")  # Fix malformed headers
+                
+                # Remove duplicate category headers
+                for category in categories:
+                    # Find all instances of this category header
+                    header_pattern = f"**{category}:**"
+                    if summary_content.count(header_pattern) > 1:
+                        print(f"[DEBUG] Found duplicate headers for category: {category}")
+                        # Keep only the first occurrence
+                        first_pos = summary_content.find(header_pattern)
+                        if first_pos != -1:
+                            # Remove subsequent occurrences
+                            remaining_content = summary_content[first_pos + len(header_pattern):]
+                            # Find next category header or end
+                            next_header_pos = -1
+                            for other_cat in categories:
+                                if other_cat != category:
+                                    other_header = f"**{other_cat}:**"
+                                    pos = remaining_content.find(other_header)
+                                    if pos != -1 and (next_header_pos == -1 or pos < next_header_pos):
+                                        next_header_pos = pos
+                            
+                            if next_header_pos != -1:
+                                # Keep content up to next category
+                                summary_content = summary_content[:first_pos + len(header_pattern)] + remaining_content[:next_header_pos]
+                            else:
+                                # Keep content up to end
+                                summary_content = summary_content[:first_pos + len(header_pattern)] + remaining_content
+                
+                # Ensure proper spacing between categories
+                for category in categories:
+                    header_pattern = f"**{category}:**"
+                    if header_pattern in summary_content:
+                        # Ensure there's a newline before each category header (except the first)
+                        if not summary_content.startswith(header_pattern):
+                            summary_content = summary_content.replace(header_pattern, f"\n\n{header_pattern}")
+                            # Remove any double newlines
+                            summary_content = summary_content.replace("\n\n\n", "\n\n")
+                
+                print(f"[DEBUG] Post-processing completed. Summary length: {len(summary_content)} characters")
+        except Exception as e:
+            print(f"[ERROR] Post-processing failed for user {user_id}: {e}")
+            # Continue with original content if post-processing fails
         
         # Count actual words in the summary
         actual_word_count = len(summary_content.split())
