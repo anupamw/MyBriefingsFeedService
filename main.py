@@ -3266,14 +3266,19 @@ async def generate_and_store_ai_summary(
     """Generate an AI-assisted summary and store it in the database"""
     try:
         user_id = current_user["id"]
+        print(f"[INFO] Starting AI summary generation for user {user_id} with max_words={max_words}")
         
         # Get user's active categories
+        print(f"[DEBUG] Fetching active categories for user {user_id}")
         user_categories = db.query(UserCategoryDB).filter(
             UserCategoryDB.user_id == user_id,
             UserCategoryDB.is_active == True
         ).all()
         
+        print(f"[DEBUG] Found {len(user_categories)} active categories for user {user_id}")
+        
         if not user_categories:
+            print(f"[ERROR] No active categories found for user {user_id}")
             raise HTTPException(
                 status_code=404, 
                 detail=f"No active categories found for user {user_id}"
@@ -3281,18 +3286,24 @@ async def generate_and_store_ai_summary(
         
         # Get feed items for user's categories (only relevant items)
         category_names = [cat.category_name for cat in user_categories]
+        print(f"[DEBUG] Fetching feed items for categories: {category_names}")
+        
         feed_items = db.query(FeedItemDB).filter(
             FeedItemDB.category.in_(category_names),
             FeedItemDB.is_relevant == True
         ).order_by(FeedItemDB.published_at.desc()).limit(100).all()
         
+        print(f"[DEBUG] Found {len(feed_items)} relevant feed items for user {user_id}")
+        
         if not feed_items:
+            print(f"[ERROR] No relevant feed items found for user {user_id}")
             raise HTTPException(
                 status_code=404, 
                 detail=f"No relevant feed items found for user {user_id}"
             )
         
         # Group feed items by category
+        print(f"[DEBUG] Grouping feed items by category for user {user_id}")
         category_feed_data = {}
         for category in user_categories:
             category_items = [item for item in feed_items if item.category == category.category_name]
@@ -3308,11 +3319,15 @@ async def generate_and_store_ai_summary(
                     for item in category_items[:20]  # Limit to 20 items per category
                 ]
         
+        print(f"[DEBUG] Grouped feed items into {len(category_feed_data)} categories for user {user_id}")
+        
         # Create the JSON structure for Perplexity
         feed_summary_data = {
             "user_categories": list(category_feed_data.keys()),
             "feed_items_by_category": category_feed_data
         }
+        
+        print(f"[DEBUG] Created feed summary data with {len(category_feed_data)} categories for user {user_id}")
         
         # Generate the prompt for Perplexity
         prompt = f"""Given this JSON structure that is organized by the topic category and news items on that category, generate a summarization for the user to read as a briefing. The summary should be up to {max_words} words long.
@@ -3342,6 +3357,8 @@ Please provide a comprehensive yet concise summary that:
 5. Stays within the {max_words} word limit
 
 RESPOND WITH EXACT FORMATTING AS SHOWN IN THE EXAMPLE ABOVE."""
+        
+        print(f"[DEBUG] Generated prompt for user {user_id}, length: {len(prompt)} characters")
         
         # Call Perplexity API
         perplexity_api_key = os.getenv("PERPLEXITY_API_KEY")
@@ -3375,23 +3392,31 @@ RESPOND WITH EXACT FORMATTING AS SHOWN IN THE EXAMPLE ABOVE."""
             "temperature": 0.3
         }
         
+        print(f"[DEBUG] Making Perplexity API call for user {user_id}")
         perplexity_url = "https://api.perplexity.ai/chat/completions"
         response = requests.post(perplexity_url, headers=headers, json=payload, timeout=30)
         
+        print(f"[DEBUG] Perplexity API response status: {response.status_code} for user {user_id}")
+        
         if not response.ok:
+            print(f"[ERROR] Perplexity API error for user {user_id}: {response.status_code} - {response.text}")
             raise HTTPException(
                 status_code=500, 
                 detail=f"Perplexity API error: {response.status_code} - {response.text}"
             )
         
         result = response.json()
+        print(f"[DEBUG] Perplexity API response structure: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'} for user {user_id}")
+        
         if "choices" not in result or not result["choices"]:
+            print(f"[ERROR] Invalid Perplexity API response for user {user_id}: {result}")
             raise HTTPException(
                 status_code=500, 
                 detail="Invalid response from Perplexity API"
             )
         
         summary_content = result["choices"][0]["message"]["content"]
+        print(f"[DEBUG] Received summary content for user {user_id}, length: {len(summary_content)} characters")
         
         # Post-process the summary to ensure proper formatting
         # Split by categories and reformat if needed
@@ -3447,8 +3472,10 @@ RESPOND WITH EXACT FORMATTING AS SHOWN IN THE EXAMPLE ABOVE."""
         
         # Count actual words in the summary
         actual_word_count = len(summary_content.split())
+        print(f"[DEBUG] Summary word count for user {user_id}: {actual_word_count} words")
         
         # Store the summary in the database
+        print(f"[DEBUG] Storing AI summary in database for user {user_id}")
         ai_summary = AISummaryDB(
             user_id=user_id,
             summary_content=summary_content,
@@ -3462,6 +3489,7 @@ RESPOND WITH EXACT FORMATTING AS SHOWN IN THE EXAMPLE ABOVE."""
         db.add(ai_summary)
         db.commit()
         db.refresh(ai_summary)
+        print(f"[INFO] Successfully stored AI summary with ID {ai_summary.id} for user {user_id}")
         
         return {
             "message": "AI summary generated and stored successfully",
@@ -3477,14 +3505,19 @@ RESPOND WITH EXACT FORMATTING AS SHOWN IN THE EXAMPLE ABOVE."""
         }
         
     except HTTPException:
+        print(f"[ERROR] HTTPException raised for user {current_user['id']}")
         raise
     except Exception as e:
         print(f"[ERROR] Failed to generate and store AI summary for user {current_user['id']}: {e}")
+        print(f"[ERROR] Exception type: {type(e).__name__}")
+        import traceback
+        print(f"[ERROR] Full traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=500, 
             detail=f"Failed to generate and store AI summary: {str(e)}"
         )
     finally:
+        print(f"[DEBUG] Closing database connection for user {current_user['id']}")
         db.close()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
