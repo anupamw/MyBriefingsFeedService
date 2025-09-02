@@ -3351,7 +3351,7 @@ RESPOND WITH EXACT FORMATTING AS SHOWN IN THE EXAMPLE ABOVE."""
         }
         
         payload = {
-            "model": "llama-3.1-sonar-small-128k-online",
+            "model": "sonar",
             "messages": [
                 {
                     "role": "system", 
@@ -3363,7 +3363,7 @@ RESPOND WITH EXACT FORMATTING AS SHOWN IN THE EXAMPLE ABOVE."""
                 }
             ],
             "max_tokens": 1000,
-            "temperature": 0.3
+            "temperature": 0.7
         }
         
         print(f"[DEBUG] Making Perplexity API call for user {user_id}")
@@ -3375,29 +3375,38 @@ RESPOND WITH EXACT FORMATTING AS SHOWN IN THE EXAMPLE ABOVE."""
         print(f"[DEBUG] Request payload temperature: {payload['temperature']}")
         print(f"[DEBUG] Number of messages: {len(payload['messages'])}")
         
-        response = requests.post(perplexity_url, headers=headers, json=payload, timeout=30)
-        
-        print(f"[DEBUG] Perplexity API response status: {response.status_code} for user {user_id}")
-        
-        if not response.ok:
-            print(f"[ERROR] Perplexity API error for user {user_id}: {response.status_code} - {response.text}")
+        try:
+            response = requests.post(perplexity_url, headers=headers, json=payload, timeout=30)
+            response.raise_for_status()
+            
+            print(f"[DEBUG] Perplexity API response status: {response.status_code} for user {user_id}")
+            
+            result = response.json()
+            print(f"[DEBUG] Perplexity API response structure: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'} for user {user_id}")
+            
+            if "choices" not in result or not result["choices"]:
+                print(f"[ERROR] Invalid Perplexity API response for user {user_id}: {result}")
+                raise HTTPException(
+                    status_code=500, 
+                    detail="Invalid response from Perplexity API"
+                )
+            
+            summary_content = result["choices"][0]["message"]["content"]
+            print(f"[DEBUG] Received summary content for user {user_id}, length: {len(summary_content)} characters")
+            
+        except requests.exceptions.RequestException as e:
+            print(f"[ERROR] Perplexity API request failed for user {user_id}: {e}")
+            error_content = ""
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_content = e.response.text
+                except:
+                    error_content = str(e)
+            print(f"[ERROR] Full error response: {error_content}")
             raise HTTPException(
                 status_code=500, 
-                detail=f"Perplexity API error: {response.status_code} - {response.text}"
+                detail=f"Perplexity API error: {str(e)}"
             )
-        
-        result = response.json()
-        print(f"[DEBUG] Perplexity API response structure: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'} for user {user_id}")
-        
-        if "choices" not in result or not result["choices"]:
-            print(f"[ERROR] Invalid Perplexity API response for user {user_id}: {result}")
-            raise HTTPException(
-                status_code=500, 
-                detail="Invalid response from Perplexity API"
-            )
-        
-        summary_content = result["choices"][0]["message"]["content"]
-        print(f"[DEBUG] Received summary content for user {user_id}, length: {len(summary_content)} characters")
         
         # Post-process the summary to ensure proper formatting
         # Split by categories and reformat if needed
