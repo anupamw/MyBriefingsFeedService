@@ -33,7 +33,7 @@ spec:
         - name: PERPLEXITY_API_KEY
           valueFrom:
             secretKeyRef:
-              name: api-secrets
+              name: api-keys
               key: perplexity-api-key
         resources:
           requests:
