@@ -376,37 +376,8 @@ async def root():
             }
             
             .subtitle {
-                color: #666;
-                margin-bottom: 30px;
-            }
-            
-            .form-container {
-                display: none;
-            }
-            
-            .form-container.active {
-                display: block;
-            }
-            
-            .form-group {
-                margin-bottom: 20px;
-                text-align: left;
-            }
-            
-            label {
-                display: block;
-                margin-bottom: 5px;
-                color: #333;
-                font-weight: 500;
-            }
-            
-            input {
-                width: 100%;
-                padding: 12px;
-                border: 2px solid #e1e5e9;
-                border-radius: 10px;
-                font-size: 16px;
-                transition: border-color 0.3s;
+
+
             }
             
             input:focus {
@@ -3370,6 +3341,9 @@ RESPOND WITH EXACT FORMATTING AS SHOWN IN THE EXAMPLE ABOVE."""
             )
         
         print(f"[DEBUG] Using Perplexity API key: {perplexity_api_key[:10]}... for user {user_id}")
+        print(f"[DEBUG] API key length: {len(perplexity_api_key)} characters")
+        print(f"[DEBUG] API key starts with: {perplexity_api_key[:20]}")
+        print(f"[DEBUG] API key ends with: {perplexity_api_key[-10:]}")
         
         headers = {
             "Authorization": f"Bearer {perplexity_api_key}",
@@ -3377,7 +3351,7 @@ RESPOND WITH EXACT FORMATTING AS SHOWN IN THE EXAMPLE ABOVE."""
         }
         
         payload = {
-            "model": "sonar",
+            "model": "llama-3.1-sonar-small-128k-online",
             "messages": [
                 {
                     "role": "system", 
@@ -3394,6 +3368,13 @@ RESPOND WITH EXACT FORMATTING AS SHOWN IN THE EXAMPLE ABOVE."""
         
         print(f"[DEBUG] Making Perplexity API call for user {user_id}")
         perplexity_url = "https://api.perplexity.ai/chat/completions"
+        print(f"[DEBUG] API URL: {perplexity_url}")
+        print(f"[DEBUG] Request payload keys: {list(payload.keys())}")
+        print(f"[DEBUG] Request payload model: {payload['model']}")
+        print(f"[DEBUG] Request payload max_tokens: {payload['max_tokens']}")
+        print(f"[DEBUG] Request payload temperature: {payload['temperature']}")
+        print(f"[DEBUG] Number of messages: {len(payload['messages'])}")
+        
         response = requests.post(perplexity_url, headers=headers, json=payload, timeout=30)
         
         print(f"[DEBUG] Perplexity API response status: {response.status_code} for user {user_id}")
