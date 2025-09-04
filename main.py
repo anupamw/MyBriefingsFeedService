@@ -376,12 +376,29 @@ async def root():
             }
             
             .subtitle {
-
-
-
-
-
-
+                color: #666;
+                margin-bottom: 30px;
+            }
+            
+            .form-group {
+                margin-bottom: 20px;
+                text-align: left;
+            }
+            
+            label {
+                display: block;
+                margin-bottom: 5px;
+                color: #333;
+                font-weight: 500;
+            }
+            
+            input {
+                width: 100%;
+                padding: 12px;
+                border: 2px solid #e1e5e9;
+                border-radius: 10px;
+                font-size: 16px;
+                transition: border-color 0.3s;
             }
             
             input:focus {
@@ -3363,7 +3380,7 @@ RESPOND WITH EXACT FORMATTING AS SHOWN IN THE EXAMPLE ABOVE."""
         }
         
         payload = {
-            "model": "llama-3.1-sonar-small-128k-online",
+            "model": "sonar",
             "messages": [
                 {
                     "role": "system", 
