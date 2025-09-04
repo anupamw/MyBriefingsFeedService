@@ -2943,7 +2943,10 @@ async def debug_filtering_stats(user_id: int):
                     "filtered": 0
                 }
             source_breakdown[source]["total"] += 1
-            source_breakdown[source]["kept"] += 1  # All items in DB are "kept"
+            if item.is_relevant:
+                source_breakdown[source]["kept"] += 1
+            else:
+                source_breakdown[source]["filtered"] += 1
             
             # Initialize category breakdown
             if category not in category_breakdown:
@@ -2953,7 +2956,10 @@ async def debug_filtering_stats(user_id: int):
                     "filtered": 0
                 }
             category_breakdown[category]["total"] += 1
-            category_breakdown[category]["kept"] += 1
+            if item.is_relevant:
+                category_breakdown[category]["kept"] += 1
+            else:
+                category_breakdown[category]["filtered"] += 1
         
         # Calculate filtering rates
         for source in source_breakdown:
@@ -2968,13 +2974,17 @@ async def debug_filtering_stats(user_id: int):
             filtered = category_breakdown[category]["filtered"]
             category_breakdown[category]["filtering_rate"] = round((filtered / total * 100) if total > 0 else 0, 1)
         
+        # Calculate overall stats
+        relevant_items = sum(1 for item in feed_items if item.is_relevant)
+        irrelevant_items = sum(1 for item in feed_items if not item.is_relevant)
+        
         return {
             "user_id": user_id,
             "filtering_stats": {
                 "total_items_processed": total_items,
-                "items_kept": total_items,  # All items in DB are "kept"
-                "items_filtered_out": 0,  # We don't track filtered items in DB
-                "filtering_rate": 0.0
+                "items_kept": relevant_items,
+                "items_filtered_out": irrelevant_items,
+                "filtering_rate": round((irrelevant_items / total_items * 100) if total_items > 0 else 0, 1)
             },
             "source_breakdown": source_breakdown,
             "category_breakdown": category_breakdown,
