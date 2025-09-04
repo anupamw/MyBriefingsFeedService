@@ -23,9 +23,9 @@ class FeedItemFilter:
         """Initialize Perplexity client"""
         print(f"[DEBUG] feed_filter.py: Starting _init_perplexity_client")
         try:
-            # Use same import pattern as rest of codebase
+            # Use relative import from the same directory level
             print(f"[DEBUG] feed_filter.py: Attempting to import PerplexityRunner")
-            from services.feed_ingestion.runners.perplexity_runner import PerplexityRunner
+            from ..runners.perplexity_runner import PerplexityRunner
             print(f"[DEBUG] feed_filter.py: Successfully imported PerplexityRunner")
             self.perplexity_client = PerplexityRunner()
             print(f"[DEBUG] feed_filter.py: Successfully created PerplexityRunner instance")
