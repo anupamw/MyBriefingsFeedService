@@ -9,14 +9,8 @@ print(f"[DEBUG] feed_filter.py: Current working directory: {os.getcwd()}")
 print(f"[DEBUG] feed_filter.py: __file__: {__file__}")
 print(f"[DEBUG] feed_filter.py: Current sys.path: {sys.path}")
 
-# Add the current directory's parent to Python path for relative imports
-current_dir = os.path.dirname(__file__)
-parent_dir = os.path.dirname(current_dir)
-print(f"[DEBUG] feed_filter.py: current_dir: {current_dir}")
-print(f"[DEBUG] feed_filter.py: parent_dir: {parent_dir}")
-
-sys.path.insert(0, parent_dir)
-print(f"[DEBUG] feed_filter.py: Updated sys.path: {sys.path}")
+# Import shared components - same pattern as runners
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../../'))
 
 class FeedItemFilter:
     """Filter feed items for relevance using Perplexity AI"""
@@ -29,9 +23,9 @@ class FeedItemFilter:
         """Initialize Perplexity client"""
         print(f"[DEBUG] feed_filter.py: Starting _init_perplexity_client")
         try:
-            # Use relative import from the parent directory
+            # Use same import pattern as rest of codebase
             print(f"[DEBUG] feed_filter.py: Attempting to import PerplexityRunner")
-            from runners.perplexity_runner import PerplexityRunner
+            from services.feed_ingestion.runners.perplexity_runner import PerplexityRunner
             print(f"[DEBUG] feed_filter.py: Successfully imported PerplexityRunner")
             self.perplexity_client = PerplexityRunner()
             print(f"[DEBUG] feed_filter.py: Successfully created PerplexityRunner instance")
