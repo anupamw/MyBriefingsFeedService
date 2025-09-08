@@ -985,9 +985,27 @@ async def root():
             }
             
             async function signup() {
-                const username = document.getElementById('signup-username').value;
-                const email = document.getElementById('signup-email').value;
+                const username = document.getElementById('signup-username').value.trim();
+                const email = document.getElementById('signup-email').value.trim();
                 const password = document.getElementById('signup-password').value;
+                
+                // Frontend validation
+                if (!username || username.length < 3) {
+                    showError('Username must be at least 3 characters long.');
+                    return;
+                }
+                if (username.length > 50) {
+                    showError('Username must be less than 50 characters.');
+                    return;
+                }
+                if (!email || !email.includes('@')) {
+                    showError('Please enter a valid email address.');
+                    return;
+                }
+                if (!password || password.length < 8) {
+                    showError('Password must be at least 8 characters long.');
+                    return;
+                }
                 
                 try {
                     const response = await fetch('/auth/signup', {
@@ -1001,11 +1019,32 @@ async def root():
                     const data = await response.json();
                     
                     if (response.ok) {
-                        localStorage.setItem('token', data.access_token);
-                        showFeed();
-                        startPeriodicFeedRefresh();
+                        // Signup successful, now automatically log the user in
+                        showSuccess('Account created successfully! Logging you in...');
+                        
+                        // Auto-login after successful signup
+                        try {
+                            const loginResponse = await fetch('/auth/login', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({ username, password })
+                            });
+                            
+                            if (loginResponse.ok) {
+                                const loginData = await loginResponse.json();
+                                localStorage.setItem('token', loginData.access_token);
+                                showFeed();
+                                startPeriodicFeedRefresh();
+                            } else {
+                                showError('Account created but login failed. Please try logging in manually.');
+                            }
+                        } catch (loginError) {
+                            showError('Account created but login failed. Please try logging in manually.');
+                        }
                     } else {
-                        showError(data.detail);
+                        showError(data.detail || 'Signup failed. Please try again.');
                     }
                 } catch (error) {
                     showError('Signup failed. Please try again.');
@@ -1809,9 +1848,9 @@ async def health_check():
     return {"status": "healthy", "service": "My Briefings Feed Service"}
 
 # Authentication endpoints
-@app.post("/auth/signup", response_model=User)
+@app.post("/auth/signup", response_model=Token)
 async def signup(user: UserCreate):
-    """Create a new user account"""
+    """Create a new user account and return JWT token for automatic login"""
     db = SessionLocal()
     
     # Check if username already exists
@@ -1865,12 +1904,13 @@ async def signup(user: UserCreate):
     
     db.close()
     
-    return User(
-        id=db_user.id,
-        username=db_user.username,
-        email=db_user.email,
-        created_at=to_utc_z(db_user.created_at)
+    # Create JWT token for automatic login after signup
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": db_user.username}, expires_delta=access_token_expires
     )
+    
+    return {"access_token": access_token, "token_type": "bearer"}
 
 @app.post("/auth/login", response_model=Token)
 async def login(user_credentials: UserLogin):
