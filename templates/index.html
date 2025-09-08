@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>My Briefings Feed Service</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+<body>
+    <div class="container" id="auth-container">
+        <div class="logo">📰</div>
+        <div class="subtitle">My Briefings Feed Service</div>
+        
+        <!-- Login Form -->
+        <div class="form-container active" id="login-form">
+            <h2>Sign In</h2>
+            <div class="form-group">
+                <label for="login-username">Username</label>
+                <input type="text" id="login-username" placeholder="Enter your username">
+            </div>
+            <div class="form-group">
+                <label for="login-password">Password</label>
+                <input type="password" id="login-password" placeholder="Enter your password">
+            </div>
+            <button onclick="login()">Sign In</button>
+            <div class="toggle-form" onclick="toggleForm('signup')">Don't have an account? Sign up</div>
+        </div>
+        
+        <!-- Signup Form -->
+        <div class="form-container" id="signup-form">
+            <h2>Sign Up</h2>
+            <div class="form-group">
+                <label for="signup-username">Username</label>
+                <input type="text" id="signup-username" placeholder="Choose a username">
+            </div>
+            <div class="form-group">
+                <label for="signup-email">Email</label>
+                <input type="email" id="signup-email" placeholder="Enter your email">
+            </div>
+            <div class="form-group">
+                <label for="signup-password">Password</label>
+                <input type="password" id="signup-password" placeholder="Choose a password">
+            </div>
+            <button onclick="signup()">Sign Up</button>
+            <div class="toggle-form" onclick="toggleForm('login')">Already have an account? Sign in</div>
+        </div>
+    </div>
+    
+    <div class="feed-container" id="feed-container">
+        <div class="feed-header">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <div>
+                    <h1 id="feed-header-title">Welcome to Your Feed! 📰</h1>
+                    <p>Here are your personalized news briefings</p>
+                </div>
+                <div id="digital-clock" style="background: #f8f9fa; color: #495057; padding: 7px 16px; border-radius: 8px; font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace; font-size: 1.05em; font-weight: 500; letter-spacing: 0.01em; box-shadow: 0 1px 4px rgba(40,60,80,0.06); border: 1px solid #dee2e6; display: inline-block; margin-left: 10px;">
+                </div>
+            </div>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+    
+        <div class="main-content">
+            <div class="sidebar">
+                <h3>Your Categories</h3>
+                <div style="margin-bottom: 15px;">
+                    <span style="cursor: pointer; color: #a8d5ba; text-decoration: underline; font-weight: 500;" onclick="clearCategoryFilter()">Show All</span>
+                </div>
+                <div id="categories-list"></div>
+                <div class="add-category">
+                    <input type="text" id="new-category" placeholder="Enter category name (max 140 chars)" maxlength="140">
+                    <button onclick="addCategory()">Add Category</button>
+                </div>
+            </div>
+            
+            <div class="feed-content">
+                <!-- AI Summary Banner -->
+                <div id="ai-summary-banner" class="ai-summary-banner" style="display: none;">
+                    <div class="ai-summary-header">
+                        <div class="ai-summary-title">
+                            <span style="font-size: 1.2em; margin-right: 10px;">🤖</span>
+                            <strong>AI Intelligence Briefing</strong>
+                            <span id="ai-summary-status" style="font-size: 0.9em; color: #666; margin-left: 10px;"></span>
+                        </div>
+                        <div class="ai-summary-controls">
+                            <button id="ai-summary-toggle" onclick="toggleAISummary()" style="background: #6c757d; color: white; border: none; border-radius: 4px; padding: 4px 8px; font-size: 0.8em; cursor: pointer; margin-right: 8px;">Collapse</button>
+                            <button id="ai-summary-refresh" onclick="refreshAISummary()" style="background: #a8d5ba; color: #2c3e50; border: none; border-radius: 4px; padding: 4px 8px; font-size: 0.8em; cursor: pointer;">🔄 Refresh</button>
+                        </div>
+                    </div>
+                    <div id="ai-summary-content" class="ai-summary-content">
+                        <div id="ai-summary-loading" style="display: none; text-align: center; padding: 20px; color: #666;">
+                            <div style="margin-bottom: 10px;">🤖 Generating AI Summary...</div>
+                            <div style="font-size: 0.9em;">This may take a few moments</div>
+                        </div>
+                        <div id="ai-summary-text" style="display: none; line-height: 1.6; color: #333; margin-bottom: 15px;"></div>
+                        <div id="ai-summary-meta" style="display: none; font-size: 0.9em; color: #666; border-top: 1px solid #e9ecef; padding-top: 10px;">
+                            <span id="ai-summary-categories"></span> • 
+                            <span id="ai-summary-words"></span> words • 
+                            <span id="ai-summary-time"></span> • 
+                            <span id="ai-summary-source"></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="feed-items"></div>
+                <div id="pagination-controls" style="display:flex;justify-content:center;gap:10px;margin-top:20px;"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
