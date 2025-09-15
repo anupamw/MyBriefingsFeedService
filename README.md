@@ -1,6 +1,6 @@
-# Football Transfers Feed Service
+# Briefings styled news Feed Service
 
-A FastAPI-based web application for football transfer news and feeds, containerized with Docker and designed for deployment on DigitalOcean.
+A FastAPI-based web application for news feeds, containerized with Docker and designed for deployment on DigitalOcean.
 
 **🚀 Latest Update: GitHub Actions deployment ready!**
 
