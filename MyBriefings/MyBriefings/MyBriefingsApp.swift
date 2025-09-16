@@ -1,6 +1,67 @@
 import SwiftUI
 import Foundation
 
+// MARK: - Environment Configuration
+enum Environment {
+    case development
+    case production
+    
+    var baseURL: String {
+        switch self {
+        case .development:
+            return "http://localhost:8000"
+        case .production:
+            return "http://64.227.134.87:30100"
+        }
+    }
+    
+    var displayName: String {
+        switch self {
+        case .development:
+            return "Development (localhost:8000)"
+        case .production:
+            return "Production (64.227.134.87:30100)"
+        }
+    }
+}
+
+class AppConfig: ObservableObject {
+    @Published var currentEnvironment: Environment
+    
+    init() {
+        // Auto-detect environment based on build configuration
+        #if DEBUG
+        self.currentEnvironment = .development
+        #else
+        self.currentEnvironment = .production
+        #endif
+        
+        // Allow manual override from UserDefaults
+        if let savedEnv = UserDefaults.standard.string(forKey: "selected_environment") {
+            if savedEnv == "production" {
+                self.currentEnvironment = .production
+            } else {
+                self.currentEnvironment = .development
+            }
+        }
+    }
+    
+    func switchEnvironment(to environment: Environment) {
+        currentEnvironment = environment
+        UserDefaults.standard.set(environment == .production ? "production" : "development", forKey: "selected_environment")
+        
+        // Clear auth token when switching environments
+        UserDefaults.standard.removeObject(forKey: "auth_token")
+        
+        // Notify APIService to update
+        NotificationCenter.default.post(name: .environmentChanged, object: environment)
+    }
+}
+
+extension Notification.Name {
+    static let environmentChanged = Notification.Name("environmentChanged")
+}
+
 // MARK: - API Models
 struct LoginRequest: Codable {
     let username: String
@@ -92,10 +153,14 @@ struct AISummaryGenerateResponse: Codable {
 // MARK: - API Service
 class APIService: ObservableObject {
     static let shared = APIService()
-    private let baseURL = "http://localhost:8000"
     private let session = URLSession.shared
     
     @Published var isAuthenticated = false
+    private var appConfig = AppConfig()
+    
+    private var baseURL: String {
+        return appConfig.currentEnvironment.baseURL
+    }
     private var authToken: String? {
         get { UserDefaults.standard.string(forKey: "auth_token") }
         set { 
@@ -106,6 +171,22 @@ class APIService: ObservableObject {
     
     init() {
         isAuthenticated = authToken != nil
+        
+        // Listen for environment changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(environmentChanged(_:)),
+            name: .environmentChanged,
+            object: nil
+        )
+    }
+    
+    @objc private func environmentChanged(_ notification: Notification) {
+        if let newEnvironment = notification.object as? Environment {
+            appConfig.currentEnvironment = newEnvironment
+            // Force re-authentication when environment changes
+            isAuthenticated = false
+        }
     }
     
     private func makeRequest(endpoint: String, method: String = "GET", body: Data? = nil) async throws -> Data {
@@ -252,11 +333,12 @@ struct MyBriefingsApp: App {
 
 struct ContentView: View {
     @StateObject private var apiService = APIService.shared
+    @StateObject private var appConfig = AppConfig()
     @State private var userCategories: [UserCategory] = []
     
     var body: some View {
         if apiService.isAuthenticated {
-            MainTabView(apiService: apiService, userCategories: $userCategories)
+            MainTabView(apiService: apiService, appConfig: appConfig, userCategories: $userCategories)
                 .onAppear {
                     Task {
                         await loadCategories()
@@ -264,7 +346,7 @@ struct ContentView: View {
                 }
         } else {
             NavigationView {
-                LoginView(apiService: apiService)
+                LoginView(apiService: apiService, appConfig: appConfig)
             }
         }
     }
@@ -280,6 +362,7 @@ struct ContentView: View {
 
 struct LoginView: View {
     let apiService: APIService
+    @ObservedObject var appConfig: AppConfig
     @State private var username = ""
     @State private var password = ""
     @State private var isLoading = false
@@ -298,6 +381,35 @@ struct LoginView: View {
             Text("Your personalized news feed")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
+            
+            // Environment Picker
+            VStack(spacing: 8) {
+                HStack {
+                    Image(systemName: "server.rack")
+                        .foregroundColor(.orange)
+                    Text("Environment:")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Spacer()
+                }
+                
+                Picker("Environment", selection: $appConfig.currentEnvironment) {
+                    Text("Development (localhost:8000)").tag(Environment.development)
+                    Text("Production (64.227.134.87:30100)").tag(Environment.production)
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .onChange(of: appConfig.currentEnvironment) { newEnvironment in
+                    appConfig.switchEnvironment(to: newEnvironment)
+                    errorMessage = nil // Clear any previous errors
+                }
+                
+                Text("Current: \(appConfig.currentEnvironment.displayName)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding()
+            .background(Color(.secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
             
             VStack(spacing: 16) {
                 TextField("Username", text: $username)
@@ -356,6 +468,7 @@ struct LoginView: View {
 
 struct MainTabView: View {
     let apiService: APIService
+    @ObservedObject var appConfig: AppConfig
     @Binding var userCategories: [UserCategory]
     
     var body: some View {
@@ -385,7 +498,7 @@ struct MainTabView: View {
             }
             
             NavigationView {
-                SettingsView(apiService: apiService)
+                SettingsView(apiService: apiService, appConfig: appConfig)
             }
             .tabItem {
                 Image(systemName: "gear")
@@ -1225,6 +1338,7 @@ struct NoSummaryCard: View {
 
 struct SettingsView: View {
     let apiService: APIService
+    @ObservedObject var appConfig: AppConfig
     @State private var showingLogoutAlert = false
     @State private var currentUser: User?
     @State private var isLoadingUser = false
@@ -1258,6 +1372,35 @@ struct SettingsView: View {
                     }
                 }
                 .padding(.vertical, 4)
+            }
+            
+            Section("Environment") {
+                HStack {
+                    Image(systemName: "server.rack")
+                        .foregroundColor(.blue)
+                    Text("Backend")
+                    Spacer()
+                    Text(appConfig.currentEnvironment.displayName)
+                        .foregroundColor(.secondary)
+                        .font(.caption)
+                }
+                
+                HStack {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .foregroundColor(.orange)
+                    Text("Switch Environment")
+                    Spacer()
+                    
+                    Picker("Environment", selection: $appConfig.currentEnvironment) {
+                        Text("Development").tag(Environment.development)
+                        Text("Production").tag(Environment.production)
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .frame(width: 180)
+                }
+                .onChange(of: appConfig.currentEnvironment) { newEnvironment in
+                    appConfig.switchEnvironment(to: newEnvironment)
+                }
             }
             
             Section("App") {
