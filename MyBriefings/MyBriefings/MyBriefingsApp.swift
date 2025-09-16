@@ -367,6 +367,7 @@ struct LoginView: View {
     @State private var password = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var showEnvironmentPicker = false
     
     var body: some View {
         VStack(spacing: 20) {
@@ -381,35 +382,6 @@ struct LoginView: View {
             Text("Your personalized news feed")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
-            
-            // Environment Picker
-            VStack(spacing: 8) {
-                HStack {
-                    Image(systemName: "server.rack")
-                        .foregroundColor(.orange)
-                    Text("Environment:")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    Spacer()
-                }
-                
-                Picker("Environment", selection: $appConfig.currentEnvironment) {
-                    Text("Development (localhost:8000)").tag(Environment.development)
-                    Text("Production (64.227.134.87:30100)").tag(Environment.production)
-                }
-                .pickerStyle(SegmentedPickerStyle())
-                .onChange(of: appConfig.currentEnvironment) { newEnvironment in
-                    appConfig.switchEnvironment(to: newEnvironment)
-                    errorMessage = nil // Clear any previous errors
-                }
-                
-                Text("Current: \(appConfig.currentEnvironment.displayName)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .padding()
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
             
             VStack(spacing: 16) {
                 TextField("Username", text: $username)
@@ -441,6 +413,48 @@ struct LoginView: View {
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         .scaleEffect(0.8) : nil
                 )
+            }
+            .padding(.horizontal, 30)
+            
+            // Discrete Environment Switcher
+            VStack(spacing: 12) {
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        showEnvironmentPicker.toggle()
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "server.rack")
+                            .font(.caption2)
+                        Text("Environment: \(appConfig.currentEnvironment == .development ? "Dev" : "Prod")")
+                            .font(.caption2)
+                        Image(systemName: showEnvironmentPicker ? "chevron.up" : "chevron.down")
+                            .font(.caption2)
+                    }
+                    .foregroundColor(.secondary)
+                }
+                
+                if showEnvironmentPicker {
+                    VStack(spacing: 8) {
+                        Picker("Environment", selection: $appConfig.currentEnvironment) {
+                            Text("Development (localhost:8000)").tag(Environment.development)
+                            Text("Production (64.227.134.87:30100)").tag(Environment.production)
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+                        .onChange(of: appConfig.currentEnvironment) { newEnvironment in
+                            appConfig.switchEnvironment(to: newEnvironment)
+                            errorMessage = nil // Clear any previous errors
+                        }
+                        
+                        Text("Current: \(appConfig.currentEnvironment.displayName)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding()
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                }
             }
             .padding(.horizontal, 30)
             
