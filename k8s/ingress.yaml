@@ -23,4 +23,21 @@ spec:
           service:
             name: my-briefings-ingestion-service
             port:
+              number: 8001
+  - host: mybriefings.org  # Cloudflare domain
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: my-briefings-service
+            port:
+              number: 8000
+      - path: /ingestion
+        pathType: Prefix
+        backend:
+          service:
+            name: my-briefings-ingestion-service
+            port:
               number: 8001 
