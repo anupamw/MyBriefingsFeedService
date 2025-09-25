@@ -2,7 +2,7 @@ import SwiftUI
 import Foundation
 
 // MARK: - Environment Configuration
-enum Environment {
+enum AppEnvironment {
     case development
     case production
     
@@ -11,7 +11,7 @@ enum Environment {
         case .development:
             return "http://localhost:8000"
         case .production:
-            return "http://64.227.134.87:30100"
+            return "https://mybriefings.org"
         }
     }
     
@@ -20,13 +20,13 @@ enum Environment {
         case .development:
             return "Development (localhost:8000)"
         case .production:
-            return "Production (64.227.134.87:30100)"
+            return "Production (mybriefings.org)"
         }
     }
 }
 
 class AppConfig: ObservableObject {
-    @Published var currentEnvironment: Environment
+    @Published var currentEnvironment: AppEnvironment
     
     init() {
         // Auto-detect environment based on build configuration
@@ -46,7 +46,7 @@ class AppConfig: ObservableObject {
         }
     }
     
-    func switchEnvironment(to environment: Environment) {
+    func switchEnvironment(to environment: AppEnvironment) {
         currentEnvironment = environment
         UserDefaults.standard.set(environment == .production ? "production" : "development", forKey: "selected_environment")
         
@@ -65,6 +65,12 @@ extension Notification.Name {
 // MARK: - API Models
 struct LoginRequest: Codable {
     let username: String
+    let password: String
+}
+
+struct SignupRequest: Codable {
+    let username: String
+    let email: String
     let password: String
 }
 
@@ -182,7 +188,7 @@ class APIService: ObservableObject {
     }
     
     @objc private func environmentChanged(_ notification: Notification) {
-        if let newEnvironment = notification.object as? Environment {
+        if let newEnvironment = notification.object as? AppEnvironment {
             appConfig.currentEnvironment = newEnvironment
             // Force re-authentication when environment changes
             isAuthenticated = false
@@ -238,6 +244,17 @@ class APIService: ObservableObject {
     
     func logout() {
         authToken = nil
+    }
+    
+    func signup(username: String, email: String, password: String) async throws -> LoginResponse {
+        let request = SignupRequest(username: username, email: email, password: password)
+        let data = try JSONEncoder().encode(request)
+        
+        let responseData = try await makeRequest(endpoint: "/auth/signup", method: "POST", body: data)
+        let response = try JSONDecoder().decode(LoginResponse.self, from: responseData)
+        
+        authToken = response.access_token
+        return response
     }
     
     // MARK: - Categories
@@ -413,6 +430,16 @@ struct LoginView: View {
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         .scaleEffect(0.8) : nil
                 )
+                
+                // Sign Up Link
+                HStack {
+                    Text("Don't have an account?")
+                        .foregroundColor(.secondary)
+                    NavigationLink("Sign Up", destination: SignupView(apiService: apiService))
+                        .foregroundColor(.blue)
+                }
+                .font(.footnote)
+                .padding(.top, 10)
             }
             .padding(.horizontal, 30)
             
@@ -437,8 +464,8 @@ struct LoginView: View {
                 if showEnvironmentPicker {
                     VStack(spacing: 8) {
                         Picker("Environment", selection: $appConfig.currentEnvironment) {
-                            Text("Development (localhost:8000)").tag(Environment.development)
-                            Text("Production (64.227.134.87:30100)").tag(Environment.production)
+                            Text("Development (localhost:8000)").tag(AppEnvironment.development)
+                            Text("Production (mybriefings.org)").tag(AppEnvironment.production)
                         }
                         .pickerStyle(SegmentedPickerStyle())
                         .onChange(of: appConfig.currentEnvironment) { newEnvironment in
@@ -472,6 +499,104 @@ struct LoginView: View {
         do {
             _ = try await apiService.login(username: username, password: password)
             // APIService will automatically update isAuthenticated
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        
+        isLoading = false
+    }
+}
+
+struct SignupView: View {
+    let apiService: APIService
+    @State private var username = ""
+    @State private var email = ""
+    @State private var password = ""
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Spacer()
+            
+            Image(systemName: "newspaper.fill")
+                .font(.system(size: 60))
+                .foregroundColor(.blue)
+            
+            Text("Create Account")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+            
+            Text("Join us for personalized news")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            
+            VStack(spacing: 16) {
+                TextField("Username", text: $username)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .autocapitalization(.none)
+                
+                TextField("Email", text: $email)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .autocapitalization(.none)
+                    .keyboardType(.emailAddress)
+                
+                SecureField("Password", text: $password)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                
+                if let errorMessage = errorMessage {
+                    Text(errorMessage)
+                        .foregroundColor(.red)
+                        .font(.caption)
+                }
+                
+                Button("Create Account") {
+                    Task {
+                        await signUp()
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+                .background(isLoading ? Color.gray : Color.green)
+                .foregroundColor(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .disabled(username.isEmpty || email.isEmpty || password.isEmpty || isLoading)
+                .overlay(
+                    isLoading ? ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(0.8) : nil
+                )
+                
+                // Sign In Link
+                HStack {
+                    Text("Already have an account?")
+                        .foregroundColor(.secondary)
+                    Button("Sign In") {
+                        dismiss()
+                    }
+                    .foregroundColor(.blue)
+                }
+                .font(.footnote)
+                .padding(.top, 10)
+            }
+            .padding(.horizontal, 30)
+            
+            Spacer()
+        }
+        .padding()
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+    
+    private func signUp() async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            _ = try await apiService.signup(username: username, email: email, password: password)
+            // APIService will automatically update isAuthenticated
+            dismiss()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -1406,8 +1531,8 @@ struct SettingsView: View {
                     Spacer()
                     
                     Picker("Environment", selection: $appConfig.currentEnvironment) {
-                        Text("Development").tag(Environment.development)
-                        Text("Production").tag(Environment.production)
+                        Text("Development").tag(AppEnvironment.development)
+                        Text("Production").tag(AppEnvironment.production)
                     }
                     .pickerStyle(SegmentedPickerStyle())
                     .frame(width: 180)

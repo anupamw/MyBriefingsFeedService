@@ -7,6 +7,12 @@ struct LoginRequest: Codable {
     let password: String
 }
 
+struct SignupRequest: Codable {
+    let username: String
+    let email: String
+    let password: String
+}
+
 struct LoginResponse: Codable {
     let access_token: String
     let token_type: String
@@ -92,7 +98,7 @@ struct AISummaryGenerateResponse: Codable {
 // MARK: - API Service
 class APIService: ObservableObject {
     static let shared = APIService()
-    private let baseURL = "http://localhost:8000"
+    private let baseURL = "https://mybriefings.org"
     private let session = URLSession.shared
     
     @Published var isAuthenticated = false
@@ -157,6 +163,17 @@ class APIService: ObservableObject {
     
     func logout() {
         authToken = nil
+    }
+    
+    func signup(username: String, email: String, password: String) async throws -> LoginResponse {
+        let request = SignupRequest(username: username, email: email, password: password)
+        let data = try JSONEncoder().encode(request)
+        
+        let responseData = try await makeRequest(endpoint: "/auth/signup", method: "POST", body: data)
+        let response = try JSONDecoder().decode(LoginResponse.self, from: responseData)
+        
+        authToken = response.access_token
+        return response
     }
     
     // MARK: - Categories
@@ -329,6 +346,16 @@ struct LoginView: View {
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         .scaleEffect(0.8) : nil
                 )
+                
+                // Sign Up Link
+                HStack {
+                    Text("Don't have an account?")
+                        .foregroundColor(.secondary)
+                    NavigationLink("Sign Up", destination: SignupView(apiService: apiService))
+                        .foregroundColor(.blue)
+                }
+                .font(.footnote)
+                .padding(.top, 10)
             }
             .padding(.horizontal, 30)
             
@@ -346,6 +373,104 @@ struct LoginView: View {
         do {
             _ = try await apiService.login(username: username, password: password)
             // APIService will automatically update isAuthenticated
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        
+        isLoading = false
+    }
+}
+
+struct SignupView: View {
+    let apiService: APIService
+    @State private var username = ""
+    @State private var email = ""
+    @State private var password = ""
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @Environment(\.presentationMode) var presentationMode
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Spacer()
+            
+            Image(systemName: "newspaper.fill")
+                .font(.system(size: 60))
+                .foregroundColor(.blue)
+            
+            Text("Create Account")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+            
+            Text("Join us for personalized news")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            
+            VStack(spacing: 16) {
+                TextField("Username", text: $username)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .autocapitalization(.none)
+                
+                TextField("Email", text: $email)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .autocapitalization(.none)
+                    .keyboardType(.emailAddress)
+                
+                SecureField("Password", text: $password)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                
+                if let errorMessage = errorMessage {
+                    Text(errorMessage)
+                        .foregroundColor(.red)
+                        .font(.caption)
+                }
+                
+                Button("Create Account") {
+                    Task {
+                        await signUp()
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+                .background(isLoading ? Color.gray : Color.green)
+                .foregroundColor(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .disabled(username.isEmpty || email.isEmpty || password.isEmpty || isLoading)
+                .overlay(
+                    isLoading ? ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(0.8) : nil
+                )
+                
+                // Sign In Link
+                HStack {
+                    Text("Already have an account?")
+                        .foregroundColor(.secondary)
+                    Button("Sign In") {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                    .foregroundColor(.blue)
+                }
+                .font(.footnote)
+                .padding(.top, 10)
+            }
+            .padding(.horizontal, 30)
+            
+            Spacer()
+        }
+        .padding()
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+    
+    private func signUp() async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            _ = try await apiService.signup(username: username, email: email, password: password)
+            // APIService will automatically update isAuthenticated
+            presentationMode.wrappedValue.dismiss()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -1275,7 +1400,7 @@ struct SettingsView: View {
                         .foregroundColor(.blue)
                     Text("Backend")
                     Spacer()
-                    Text("localhost:8000")
+                    Text("mybriefings.org")
                         .foregroundColor(.secondary)
                         .font(.caption)
                 }

@@ -56,9 +56,15 @@ Cloudflare offers free domain registration for certain TLDs:
 
 ## Option 1: Using k3s Built-in Traefik (Recommended)
 
+### Overview
+This option uses your existing k3s cluster's built-in Traefik load balancer combined with cert-manager to automatically obtain and manage SSL certificates from Let's Encrypt. The process involves installing cert-manager into your cluster, configuring it to communicate with Let's Encrypt's servers, and updating your ingress configuration to request TLS certificates for your domain. Once set up, cert-manager automatically handles certificate renewal, and Traefik serves your applications over HTTPS. This approach gives you full control over the SSL setup within your Kubernetes cluster and doesn't depend on external services, but requires you to have a domain name pointing to your droplet's IP address.
+
 ### Prerequisites
 1. **Domain name** (e.g., `yourdomain.com`)
 2. **DNS pointing to your droplet**: `yourdomain.com → 64.227.134.87`
+
+### Getting a Domain Name Pointed to Your Droplet
+Since you don't have a domain name yet, you'll need to register one first. You can get a domain from registrars like Namecheap, GoDaddy, or others (typically $10-15/year for .com domains). Once you have a domain, you go into your registrar's DNS management panel and create an "A record" that points your domain to your droplet's IP address (64.227.134.87). For example, if you bought "mybriefings.com", you'd create an A record where the hostname is "@" (representing the root domain) and the value is "64.227.134.87". DNS propagation can take a few hours to 48 hours to fully spread worldwide.
 
 ### Steps
 
@@ -154,6 +160,9 @@ Replace hardcoded HTTP URLs with HTTPS:
 
 ## Option 2: Using Cloudflare (Alternative - FREE)
 
+### Overview
+This option leverages Cloudflare's free tier to handle SSL termination completely outside of your infrastructure. You point your domain's DNS to Cloudflare's servers, which then proxy requests to your droplet while automatically providing SSL certificates, CDN caching, and DDoS protection. Your k3s cluster continues running HTTP internally, but users see HTTPS through Cloudflare's proxy. This is simpler because you don't need to manage certificates, install additional software, or modify your Kubernetes configuration - Cloudflare handles all the complexity. The trade-off is that you're dependent on Cloudflare's service, but you gain performance benefits through their global CDN and additional security features at no cost.
+
 ### Cloudflare Free Tier Benefits:
 - ✅ **Free SSL certificates** (automatic)
 - ✅ **Free CDN** (faster loading)
@@ -166,6 +175,9 @@ Replace hardcoded HTTP URLs with HTTPS:
 1. **Your domain** → **Cloudflare** → **Your droplet**
 2. **Cloudflare handles SSL** (visitors see HTTPS)
 3. **Cloudflare communicates with your droplet** (HTTP internally)
+
+### Getting Started with Cloudflare (No Domain Required Initially)
+Interestingly, Cloudflare can actually solve both problems for you. As mentioned in the HTTPS guide, Cloudflare offers **free domain registration** for certain country-code TLDs like .tk, .ml, .ga, .cf, and .gq. You can sign up for Cloudflare, register a free domain like "mybriefings.tk" directly through them, and they automatically handle the DNS setup. If you prefer a traditional domain (.com, .net), you'd first register it elsewhere, then add it to Cloudflare and change your domain registrar's nameservers to the ones Cloudflare provides (they'll give you specific ones like "nina.ns.cloudflare.com"). Either way, you then add an A record in Cloudflare's DNS panel pointing to 64.227.134.87 with the "Proxied" option enabled (orange cloud icon).
 
 ### Setup Steps:
 
