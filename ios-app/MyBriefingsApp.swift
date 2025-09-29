@@ -645,7 +645,7 @@ struct ArticleRow: View {
                 
                 Spacer()
                 
-                Text(timeAgo(from: feedItem.published_at))
+                Text(timeAgo(from: feedItem.created_at))
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -689,7 +689,7 @@ struct ArticleRow: View {
                                 Image(systemName: "calendar")
                                     .foregroundColor(.secondary)
                                     .font(.caption)
-                                Text("Published: \(formatDate(publishedAt))")
+                                Text("Original: \(formatDate(publishedAt))")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
