@@ -68,7 +68,7 @@ celery_app.conf.update(
         # Cleanup tasks
         "cleanup-old-feed-items": {
             "task": "runners.cleanup_runner.cleanup_old_feed_items",
-            "schedule": 10800.0,  # Every 3 hours (3 * 60 * 60 seconds) - BACK TO NORMAL
+            "schedule": 43200.0,  # Every 12 hours (12 * 60 * 60 seconds) - Less frequent than 6h ingestion
             "args": [24]  # Delete items older than 24 hours
         },
         # Disabled runners - uncomment to enable
