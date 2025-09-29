@@ -1,6 +1,6 @@
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 # Add the services directory to Python path
@@ -18,7 +18,7 @@ class CleanupRunner:
         """Delete feed items older than specified hours"""
         db = next(get_db())  # Get the actual database session
         try:
-            cutoff_date = datetime.utcnow() - timedelta(hours=hours_old)
+            cutoff_date = datetime.now(timezone.utc) - timedelta(hours=hours_old)
 
             old_count = db.query(FeedItem).filter(
                 FeedItem.created_at < cutoff_date
