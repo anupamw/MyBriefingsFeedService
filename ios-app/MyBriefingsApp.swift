@@ -741,8 +741,23 @@ struct ArticleRow: View {
     }
     
     private func timeAgo(from dateString: String?) -> String {
-        guard let dateString = dateString,
-              let date = ISO8601DateFormatter().date(from: dateString) else {
+        guard let dateString = dateString else {
+            return "Unknown"
+        }
+        
+        // Try ISO8601 with fractional seconds first
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        var date = formatter.date(from: dateString)
+        
+        // If that fails, try without fractional seconds
+        if date == nil {
+            formatter.formatOptions = [.withInternetDateTime]
+            date = formatter.date(from: dateString)
+        }
+        
+        guard let date = date else {
             return "Unknown"
         }
         

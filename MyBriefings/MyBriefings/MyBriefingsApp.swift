@@ -1,67 +1,6 @@
 import SwiftUI
 import Foundation
 
-// MARK: - Environment Configuration
-enum AppEnvironment {
-    case development
-    case production
-    
-    var baseURL: String {
-        switch self {
-        case .development:
-            return "http://localhost:8000"
-        case .production:
-            return "https://mybriefings.org"
-        }
-    }
-    
-    var displayName: String {
-        switch self {
-        case .development:
-            return "Development (localhost:8000)"
-        case .production:
-            return "Production (mybriefings.org)"
-        }
-    }
-}
-
-class AppConfig: ObservableObject {
-    @Published var currentEnvironment: AppEnvironment
-    
-    init() {
-        // Auto-detect environment based on build configuration
-        #if DEBUG
-        self.currentEnvironment = .development
-        #else
-        self.currentEnvironment = .production
-        #endif
-        
-        // Allow manual override from UserDefaults
-        if let savedEnv = UserDefaults.standard.string(forKey: "selected_environment") {
-            if savedEnv == "production" {
-                self.currentEnvironment = .production
-            } else {
-                self.currentEnvironment = .development
-            }
-        }
-    }
-    
-    func switchEnvironment(to environment: AppEnvironment) {
-        currentEnvironment = environment
-        UserDefaults.standard.set(environment == .production ? "production" : "development", forKey: "selected_environment")
-        
-        // Clear auth token when switching environments
-        UserDefaults.standard.removeObject(forKey: "auth_token")
-        
-        // Notify APIService to update
-        NotificationCenter.default.post(name: .environmentChanged, object: environment)
-    }
-}
-
-extension Notification.Name {
-    static let environmentChanged = Notification.Name("environmentChanged")
-}
-
 // MARK: - API Models
 struct LoginRequest: Codable {
     let username: String
@@ -159,14 +98,10 @@ struct AISummaryGenerateResponse: Codable {
 // MARK: - API Service
 class APIService: ObservableObject {
     static let shared = APIService()
+    private let baseURL = "https://mybriefings.org"
     private let session = URLSession.shared
     
     @Published var isAuthenticated = false
-    private var appConfig = AppConfig()
-    
-    private var baseURL: String {
-        return appConfig.currentEnvironment.baseURL
-    }
     private var authToken: String? {
         get { UserDefaults.standard.string(forKey: "auth_token") }
         set { 
@@ -177,22 +112,6 @@ class APIService: ObservableObject {
     
     init() {
         isAuthenticated = authToken != nil
-        
-        // Listen for environment changes
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(environmentChanged(_:)),
-            name: .environmentChanged,
-            object: nil
-        )
-    }
-    
-    @objc private func environmentChanged(_ notification: Notification) {
-        if let newEnvironment = notification.object as? AppEnvironment {
-            appConfig.currentEnvironment = newEnvironment
-            // Force re-authentication when environment changes
-            isAuthenticated = false
-        }
     }
     
     private func makeRequest(endpoint: String, method: String = "GET", body: Data? = nil) async throws -> Data {
@@ -350,12 +269,11 @@ struct MyBriefingsApp: App {
 
 struct ContentView: View {
     @StateObject private var apiService = APIService.shared
-    @StateObject private var appConfig = AppConfig()
     @State private var userCategories: [UserCategory] = []
     
     var body: some View {
         if apiService.isAuthenticated {
-            MainTabView(apiService: apiService, appConfig: appConfig, userCategories: $userCategories)
+            MainTabView(apiService: apiService, userCategories: $userCategories)
                 .onAppear {
                     Task {
                         await loadCategories()
@@ -363,7 +281,7 @@ struct ContentView: View {
                 }
         } else {
             NavigationView {
-                LoginView(apiService: apiService, appConfig: appConfig)
+                LoginView(apiService: apiService)
             }
         }
     }
@@ -379,12 +297,10 @@ struct ContentView: View {
 
 struct LoginView: View {
     let apiService: APIService
-    @ObservedObject var appConfig: AppConfig
     @State private var username = ""
     @State private var password = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var showEnvironmentPicker = false
     
     var body: some View {
         VStack(spacing: 20) {
@@ -443,48 +359,6 @@ struct LoginView: View {
             }
             .padding(.horizontal, 30)
             
-            // Discrete Environment Switcher
-            VStack(spacing: 12) {
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        showEnvironmentPicker.toggle()
-                    }
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "server.rack")
-                            .font(.caption2)
-                        Text("Environment: \(appConfig.currentEnvironment == .development ? "Dev" : "Prod")")
-                            .font(.caption2)
-                        Image(systemName: showEnvironmentPicker ? "chevron.up" : "chevron.down")
-                            .font(.caption2)
-                    }
-                    .foregroundColor(.secondary)
-                }
-                
-                if showEnvironmentPicker {
-                    VStack(spacing: 8) {
-                        Picker("Environment", selection: $appConfig.currentEnvironment) {
-                            Text("Development (localhost:8000)").tag(AppEnvironment.development)
-                            Text("Production (mybriefings.org)").tag(AppEnvironment.production)
-                        }
-                        .pickerStyle(SegmentedPickerStyle())
-                        .onChange(of: appConfig.currentEnvironment) { newEnvironment in
-                            appConfig.switchEnvironment(to: newEnvironment)
-                            errorMessage = nil // Clear any previous errors
-                        }
-                        
-                        Text("Current: \(appConfig.currentEnvironment.displayName)")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding()
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                }
-            }
-            .padding(.horizontal, 30)
-            
             Spacer()
         }
         .padding()
@@ -514,7 +388,7 @@ struct SignupView: View {
     @State private var password = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.presentationMode) var presentationMode
     
     var body: some View {
         VStack(spacing: 20) {
@@ -573,7 +447,7 @@ struct SignupView: View {
                     Text("Already have an account?")
                         .foregroundColor(.secondary)
                     Button("Sign In") {
-                        dismiss()
+                        presentationMode.wrappedValue.dismiss()
                     }
                     .foregroundColor(.blue)
                 }
@@ -596,7 +470,7 @@ struct SignupView: View {
         do {
             _ = try await apiService.signup(username: username, email: email, password: password)
             // APIService will automatically update isAuthenticated
-            dismiss()
+            presentationMode.wrappedValue.dismiss()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -607,7 +481,6 @@ struct SignupView: View {
 
 struct MainTabView: View {
     let apiService: APIService
-    @ObservedObject var appConfig: AppConfig
     @Binding var userCategories: [UserCategory]
     
     var body: some View {
@@ -637,7 +510,7 @@ struct MainTabView: View {
             }
             
             NavigationView {
-                SettingsView(apiService: apiService, appConfig: appConfig)
+                SettingsView(apiService: apiService)
             }
             .tabItem {
                 Image(systemName: "gear")
@@ -772,7 +645,7 @@ struct ArticleRow: View {
                 
                 Spacer()
                 
-                Text(timeAgo(from: feedItem.published_at))
+                Text(timeAgo(from: feedItem.created_at))
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -816,7 +689,7 @@ struct ArticleRow: View {
                                 Image(systemName: "calendar")
                                     .foregroundColor(.secondary)
                                     .font(.caption)
-                                Text("Published: \(formatDate(publishedAt))")
+                                Text("Original: \(formatDate(publishedAt))")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -868,8 +741,23 @@ struct ArticleRow: View {
     }
     
     private func timeAgo(from dateString: String?) -> String {
-        guard let dateString = dateString,
-              let date = ISO8601DateFormatter().date(from: dateString) else {
+        guard let dateString = dateString else {
+            return "Unknown"
+        }
+        
+        // Try ISO8601 with fractional seconds first
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        var date = formatter.date(from: dateString)
+        
+        // If that fails, try without fractional seconds
+        if date == nil {
+            formatter.formatOptions = [.withInternetDateTime]
+            date = formatter.date(from: dateString)
+        }
+        
+        guard let date = date else {
             return "Unknown"
         }
         
@@ -1477,7 +1365,6 @@ struct NoSummaryCard: View {
 
 struct SettingsView: View {
     let apiService: APIService
-    @ObservedObject var appConfig: AppConfig
     @State private var showingLogoutAlert = false
     @State private var currentUser: User?
     @State private var isLoadingUser = false
@@ -1513,35 +1400,6 @@ struct SettingsView: View {
                 .padding(.vertical, 4)
             }
             
-            Section("Environment") {
-                HStack {
-                    Image(systemName: "server.rack")
-                        .foregroundColor(.blue)
-                    Text("Backend")
-                    Spacer()
-                    Text(appConfig.currentEnvironment.displayName)
-                        .foregroundColor(.secondary)
-                        .font(.caption)
-                }
-                
-                HStack {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                        .foregroundColor(.orange)
-                    Text("Switch Environment")
-                    Spacer()
-                    
-                    Picker("Environment", selection: $appConfig.currentEnvironment) {
-                        Text("Development").tag(AppEnvironment.development)
-                        Text("Production").tag(AppEnvironment.production)
-                    }
-                    .pickerStyle(SegmentedPickerStyle())
-                    .frame(width: 180)
-                }
-                .onChange(of: appConfig.currentEnvironment) { newEnvironment in
-                    appConfig.switchEnvironment(to: newEnvironment)
-                }
-            }
-            
             Section("App") {
                 HStack {
                     Image(systemName: "info.circle")
@@ -1557,7 +1415,7 @@ struct SettingsView: View {
                         .foregroundColor(.blue)
                     Text("Backend")
                     Spacer()
-                    Text("localhost:8000")
+                    Text("mybriefings.org")
                         .foregroundColor(.secondary)
                         .font(.caption)
                 }
