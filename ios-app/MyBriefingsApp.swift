@@ -1,5 +1,6 @@
 import SwiftUI
 import Foundation
+import Combine
 
 // MARK: - API Models
 struct LoginRequest: Codable {
@@ -16,6 +17,8 @@ struct SignupRequest: Codable {
 struct LoginResponse: Codable {
     let access_token: String
     let token_type: String
+    let refresh_token: String?
+    let expires_in: TimeInterval?
 }
 
 struct User: Codable {
@@ -100,18 +103,14 @@ class APIService: ObservableObject {
     static let shared = APIService()
     private let baseURL = "https://mybriefings.org"
     private let session = URLSession.shared
+    private let tokenManager = TokenManager.shared
     
     @Published var isAuthenticated = false
-    private var authToken: String? {
-        get { UserDefaults.standard.string(forKey: "auth_token") }
-        set { 
-            UserDefaults.standard.set(newValue, forKey: "auth_token")
-            isAuthenticated = newValue != nil
-        }
-    }
     
     init() {
-        isAuthenticated = authToken != nil
+        // Observe token manager's authentication state
+        tokenManager.$isAuthenticated
+            .assign(to: &$isAuthenticated)
     }
     
     private func makeRequest(endpoint: String, method: String = "GET", body: Data? = nil) async throws -> Data {
@@ -123,7 +122,8 @@ class APIService: ObservableObject {
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        if let token = authToken {
+        // Get valid token (will refresh if needed)
+        if let token = await tokenManager.getValidAccessToken() {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
@@ -138,7 +138,8 @@ class APIService: ObservableObject {
         }
         
         if httpResponse.statusCode == 401 {
-            authToken = nil
+            // Token is invalid, clear tokens and force re-login
+            tokenManager.clearTokens()
             throw APIError.unauthorized
         }
         
@@ -157,12 +158,18 @@ class APIService: ObservableObject {
         let responseData = try await makeRequest(endpoint: "/auth/login", method: "POST", body: data)
         let response = try JSONDecoder().decode(LoginResponse.self, from: responseData)
         
-        authToken = response.access_token
+        // Save tokens securely
+        tokenManager.saveTokens(
+            accessToken: response.access_token,
+            refreshToken: response.refresh_token,
+            expiresIn: response.expires_in
+        )
+        
         return response
     }
     
     func logout() {
-        authToken = nil
+        tokenManager.clearTokens()
     }
     
     func signup(username: String, email: String, password: String) async throws -> LoginResponse {
@@ -172,7 +179,13 @@ class APIService: ObservableObject {
         let responseData = try await makeRequest(endpoint: "/auth/signup", method: "POST", body: data)
         let response = try JSONDecoder().decode(LoginResponse.self, from: responseData)
         
-        authToken = response.access_token
+        // Save tokens securely after successful signup
+        tokenManager.saveTokens(
+            accessToken: response.access_token,
+            refreshToken: response.refresh_token,
+            expiresIn: response.expires_in
+        )
+        
         return response
     }
     

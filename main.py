@@ -13,6 +13,8 @@ from passlib.context import CryptContext
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+import hashlib
+import secrets
 
 from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Boolean, UniqueConstraint, Float, JSON, Index
 from sqlalchemy.ext.declarative import declarative_base
@@ -40,7 +42,8 @@ templates = Jinja2Templates(directory="templates")
 # Security configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here-change-in-production")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 1440
+ACCESS_TOKEN_EXPIRE_MINUTES = 30  # Short-lived for security
+REFRESH_TOKEN_EXPIRE_DAYS = 30    # Long-lived for convenience
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -136,6 +139,29 @@ class UserCategoryDB(Base):
         UniqueConstraint('user_id', 'category_name', name='unique_user_category'),
     )
 
+class RefreshTokenDB(Base):
+    """Refresh tokens for long-running authentication sessions"""
+    __tablename__ = "refresh_tokens"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    token_hash = Column(String(255), nullable=False, unique=True, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_used_at = Column(DateTime, default=datetime.utcnow)
+    is_active = Column(Boolean, default=True)
+    
+    # Optional: Track device/client info
+    user_agent = Column(String(500), nullable=True)
+    ip_address = Column(String(45), nullable=True)  # IPv6 compatible
+    
+    # Index for efficient lookups and cleanup
+    __table_args__ = (
+        Index('idx_refresh_tokens_user_id', 'user_id'),
+        Index('idx_refresh_tokens_expires_at', 'expires_at'),
+        Index('idx_refresh_tokens_active', 'is_active'),
+    )
+
 # Create tables
 Base.metadata.create_all(bind=engine)
 
@@ -225,6 +251,11 @@ class User(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    refresh_token: Optional[str] = None
+    expires_in: Optional[int] = None
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 
 class TokenData(BaseModel):
     username: Optional[str] = None
@@ -276,9 +307,136 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+def generate_refresh_token() -> str:
+    """Generate a cryptographically secure refresh token"""
+    return secrets.token_urlsafe(32)
+
+def hash_refresh_token(token: str) -> str:
+    """Hash refresh token for secure storage"""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+def create_refresh_token_db(user_id: int, token: str, request: Request = None) -> RefreshTokenDB:
+    """Create refresh token database entry"""
+    db = SessionLocal()
+    try:
+        # Hash the token for storage
+        token_hash = hash_refresh_token(token)
+        
+        # Set expiration
+        expires_at = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+        
+        # Get client info if available
+        user_agent = None
+        ip_address = None
+        if request:
+            user_agent = request.headers.get("user-agent")
+            ip_address = request.client.host if request.client else None
+        
+        # Create refresh token record
+        refresh_token_db = RefreshTokenDB(
+            user_id=user_id,
+            token_hash=token_hash,
+            expires_at=expires_at,
+            user_agent=user_agent,
+            ip_address=ip_address
+        )
+        
+        db.add(refresh_token_db)
+        db.commit()
+        db.refresh(refresh_token_db)
+        
+        return refresh_token_db
+    finally:
+        db.close()
+
+def validate_refresh_token(token: str) -> Optional[dict]:
+    """Validate refresh token and return user info"""
+    db = SessionLocal()
+    try:
+        token_hash = hash_refresh_token(token)
+        
+        # Find active, non-expired refresh token
+        refresh_token_db = db.query(RefreshTokenDB).filter(
+            RefreshTokenDB.token_hash == token_hash,
+            RefreshTokenDB.is_active == True,
+            RefreshTokenDB.expires_at > datetime.utcnow()
+        ).first()
+        
+        if not refresh_token_db:
+            return None
+        
+        # Update last used timestamp
+        refresh_token_db.last_used_at = datetime.utcnow()
+        db.commit()
+        
+        # Get user info
+        user = get_user_by_id(refresh_token_db.user_id)
+        return user
+    finally:
+        db.close()
+
+def revoke_refresh_token(token: str) -> bool:
+    """Revoke a specific refresh token"""
+    db = SessionLocal()
+    try:
+        token_hash = hash_refresh_token(token)
+        
+        refresh_token_db = db.query(RefreshTokenDB).filter(
+            RefreshTokenDB.token_hash == token_hash,
+            RefreshTokenDB.is_active == True
+        ).first()
+        
+        if refresh_token_db:
+            refresh_token_db.is_active = False
+            db.commit()
+            return True
+        return False
+    finally:
+        db.close()
+
+def revoke_all_user_refresh_tokens(user_id: int) -> int:
+    """Revoke all refresh tokens for a user"""
+    db = SessionLocal()
+    try:
+        count = db.query(RefreshTokenDB).filter(
+            RefreshTokenDB.user_id == user_id,
+            RefreshTokenDB.is_active == True
+        ).update({"is_active": False})
+        db.commit()
+        return count
+    finally:
+        db.close()
+
+def cleanup_expired_refresh_tokens() -> int:
+    """Clean up expired refresh tokens"""
+    db = SessionLocal()
+    try:
+        count = db.query(RefreshTokenDB).filter(
+            RefreshTokenDB.expires_at < datetime.utcnow()
+        ).delete()
+        db.commit()
+        return count
+    finally:
+        db.close()
+
 def get_user_by_username(username: str):
     db = SessionLocal()
     user = db.query(UserDB).filter(UserDB.username == username).first()
+    db.close()
+    if user:
+        return {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "hashed_password": user.hashed_password,
+            "created_at": user.created_at.isoformat() if user.created_at else None
+        }
+    return None
+
+def get_user_by_id(user_id: int):
+    """Get user by ID for refresh token validation"""
+    db = SessionLocal()
+    user = db.query(UserDB).filter(UserDB.id == user_id).first()
     db.close()
     if user:
         return {
@@ -344,7 +502,7 @@ async def health_check():
 
 # Authentication endpoints
 @app.post("/auth/signup", response_model=Token)
-async def signup(user: UserCreate):
+async def signup(user: UserCreate, request: Request):
     """Create a new user account and return JWT token for automatic login"""
     db = SessionLocal()
     
@@ -399,16 +557,25 @@ async def signup(user: UserCreate):
     
     db.close()
     
-    # Create JWT token for automatic login after signup
+    # Create JWT tokens
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": db_user.username}, expires_delta=access_token_expires
     )
     
-    return {"access_token": access_token, "token_type": "bearer"}
+    # Generate refresh token
+    refresh_token = generate_refresh_token()
+    create_refresh_token_db(db_user.id, refresh_token, request)
+    
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "refresh_token": refresh_token,
+        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    }
 
 @app.post("/auth/login", response_model=Token)
-async def login(user_credentials: UserLogin):
+async def login(user_credentials: UserLogin, request: Request):
     """Authenticate user and return JWT token"""
     user = authenticate_user(user_credentials.username, user_credentials.password)
     if not user:
@@ -418,12 +585,100 @@ async def login(user_credentials: UserLogin):
             headers={"WWW-Authenticate": "Bearer"},
         )
     
+    # Create JWT tokens
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user["username"]}, expires_delta=access_token_expires
     )
     
-    return {"access_token": access_token, "token_type": "bearer"}
+    # Generate refresh token
+    refresh_token = generate_refresh_token()
+    create_refresh_token_db(user["id"], refresh_token, request)
+    
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "refresh_token": refresh_token,
+        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    }
+
+@app.post("/auth/refresh", response_model=Token)
+async def refresh_access_token(refresh_request: RefreshTokenRequest, request: Request):
+    """Refresh access token using refresh token"""
+    try:
+        # Validate refresh token
+        user = validate_refresh_token(refresh_request.refresh_token)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired refresh token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        # Generate new access token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user["username"]}, expires_delta=access_token_expires
+        )
+        
+        # Optionally generate new refresh token (token rotation)
+        # For security, you can rotate refresh tokens on each use
+        new_refresh_token = generate_refresh_token()
+        
+        # Revoke old refresh token
+        revoke_refresh_token(refresh_request.refresh_token)
+        
+        # Create new refresh token
+        create_refresh_token_db(user["id"], new_refresh_token, request)
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer", 
+            "refresh_token": new_refresh_token,
+            "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error refreshing token: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to refresh token"
+        )
+
+@app.post("/auth/logout")
+async def logout(refresh_request: RefreshTokenRequest, current_user: dict = Depends(get_current_user)):
+    """Logout user and revoke refresh token"""
+    try:
+        # Revoke the specific refresh token
+        revoked = revoke_refresh_token(refresh_request.refresh_token)
+        
+        if revoked:
+            return {"message": "Successfully logged out"}
+        else:
+            return {"message": "Refresh token not found or already revoked"}
+            
+    except Exception as e:
+        print(f"Error during logout: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to logout"
+        )
+
+@app.post("/auth/logout-all")
+async def logout_all_devices(current_user: dict = Depends(get_current_user)):
+    """Logout user from all devices by revoking all refresh tokens"""
+    try:
+        count = revoke_all_user_refresh_tokens(current_user["id"])
+        return {"message": f"Successfully logged out from {count} devices"}
+        
+    except Exception as e:
+        print(f"Error during logout all: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to logout from all devices"
+        )
 
 @app.get("/auth/me", response_model=User)
 async def get_current_user_info(current_user: dict = Depends(get_current_user)):
@@ -479,6 +734,16 @@ async def delete_user_account(current_user: dict = Depends(get_current_user)):
             UserCategoryDB.user_id == user_id
         ).delete()
         
+        # Delete user's AI summaries
+        deleted_summaries_count = db.query(AISummaryDB).filter(
+            AISummaryDB.user_id == user_id
+        ).delete()
+        
+        # Delete user's refresh tokens
+        deleted_tokens_count = db.query(RefreshTokenDB).filter(
+            RefreshTokenDB.user_id == user_id
+        ).delete()
+        
         # Delete the user account
         user = db.query(UserDB).filter(UserDB.id == user_id).first()
         if user:
@@ -490,6 +755,8 @@ async def delete_user_account(current_user: dict = Depends(get_current_user)):
             "message": "User account and all associated data deleted successfully",
             "feed_items_deleted": deleted_feed_count,
             "categories_deleted": deleted_categories_count,
+            "summaries_deleted": deleted_summaries_count,
+            "refresh_tokens_deleted": deleted_tokens_count,
             "user_deleted": True
         }
         
@@ -2085,6 +2352,71 @@ RESPOND WITH EXACT FORMATTING AS SHOWN IN THE EXAMPLE ABOVE."""
         db.close()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Refresh Token Management Endpoints
+@app.get("/auth/refresh-tokens/stats")
+async def get_refresh_token_stats(current_user: dict = Depends(get_current_user)):
+    """Get refresh token statistics for current user"""
+    db = SessionLocal()
+    try:
+        user_id = current_user["id"]
+        
+        # Get user's refresh tokens
+        active_tokens = db.query(RefreshTokenDB).filter(
+            RefreshTokenDB.user_id == user_id,
+            RefreshTokenDB.is_active == True,
+            RefreshTokenDB.expires_at > datetime.utcnow()
+        ).all()
+        
+        expired_tokens = db.query(RefreshTokenDB).filter(
+            RefreshTokenDB.user_id == user_id,
+            RefreshTokenDB.expires_at <= datetime.utcnow()
+        ).count()
+        
+        revoked_tokens = db.query(RefreshTokenDB).filter(
+            RefreshTokenDB.user_id == user_id,
+            RefreshTokenDB.is_active == False
+        ).count()
+        
+        return {
+            "user_id": user_id,
+            "active_tokens": len(active_tokens),
+            "expired_tokens": expired_tokens,
+            "revoked_tokens": revoked_tokens,
+            "active_sessions": [
+                {
+                    "id": token.id,
+                    "created_at": token.created_at.isoformat(),
+                    "last_used_at": token.last_used_at.isoformat() if token.last_used_at else None,
+                    "expires_at": token.expires_at.isoformat(),
+                    "user_agent": token.user_agent,
+                    "ip_address": token.ip_address
+                }
+                for token in active_tokens
+            ]
+        }
+    finally:
+        db.close()
+
+@app.post("/auth/cleanup-expired-tokens")
+async def cleanup_expired_refresh_tokens_endpoint(current_user: dict = Depends(get_current_user)):
+    """Admin endpoint to cleanup expired refresh tokens"""
+    # Check if current user is admin (you can modify this logic)
+    if current_user["id"] != 1:  # Assuming user ID 1 is admin
+        raise HTTPException(status_code=403, detail="Only admin users can cleanup tokens")
+    
+    try:
+        count = cleanup_expired_refresh_tokens()
+        return {
+            "message": f"Successfully cleaned up {count} expired refresh tokens",
+            "tokens_deleted": count
+        }
+    except Exception as e:
+        print(f"Error cleaning up expired tokens: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to cleanup expired tokens: {str(e)}"
+        )
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000) 
