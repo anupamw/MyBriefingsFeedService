@@ -1,4 +1,4 @@
-// Version: 2025-07-22-01 - Force cache refresh
+// Version: 2025-01-15-01 - Token refresh support added
 // Escape HTML to prevent XSS
 function escapeHtml(text) {
     if (!text) return '';
@@ -7,13 +7,198 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// ============================================================================
+// TOKEN REFRESH LOGIC
+// ============================================================================
+
+// Prevent concurrent refresh attempts
+let refreshPromise = null;
+let refreshLock = false;  // Simple boolean lock for atomicity
+let lastRefreshAttempt = 0;  // Prevent too-frequent refreshes
+
+// Store tokens with expiry
+function storeTokens(accessToken, refreshToken, expiresIn) {
+    localStorage.setItem('token', accessToken);
+    localStorage.setItem('refresh_token', refreshToken);
+    
+    // Calculate expiry time (5 minute buffer before actual expiry)
+    const expiryTime = Date.now() + (expiresIn * 1000) - (5 * 60 * 1000);
+    localStorage.setItem('token_expiry', expiryTime.toString());
+    
+    console.log('[TOKEN] Stored tokens with expiry:', new Date(expiryTime).toISOString());
+}
+
+// Check if token needs refreshing
+function isTokenExpired() {
+    const expiry = localStorage.getItem('token_expiry');
+    if (!expiry) {
+        return true;
+    }
+    return Date.now() >= parseInt(expiry);
+}
+
+// Clear all tokens
+function clearTokens() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('token_expiry');
+    console.log('[TOKEN] Cleared all tokens');
+}
+
+// Refresh access token using refresh token
+async function refreshAccessToken() {
+    const refreshToken = localStorage.getItem('refresh_token');
+    
+    if (!refreshToken) {
+        console.error('[TOKEN] No refresh token available');
+        clearTokens();
+        return false;
+    }
+    
+    console.log('[TOKEN] Attempting to refresh access token...');
+    
+    try {
+        const response = await fetch('/auth/refresh', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ refresh_token: refreshToken })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            
+            // Store the new tokens
+            storeTokens(data.access_token, data.refresh_token, data.expires_in);
+            console.log('[TOKEN] Successfully refreshed access token');
+            return true;
+        } else {
+            console.error('[TOKEN] Token refresh failed with status:', response.status);
+            const errorData = await response.json().catch(() => ({}));
+            console.error('[TOKEN] Error details:', errorData);
+            
+            // Only clear tokens if it's truly expired/invalid, not just a network issue
+            if (response.status === 401) {
+                console.warn('[TOKEN] Refresh token invalid, clearing tokens');
+                clearTokens();
+                document.getElementById('auth-container').style.display = 'block';
+                document.getElementById('feed-container').style.display = 'none';
+                showError('Session expired. Please sign in again.');
+            }
+            return false;
+        }
+    } catch (error) {
+        console.error('[TOKEN] Token refresh error:', error);
+        return false;
+    }
+}
+
+// Get valid access token (refresh if needed)
+async function getValidAccessToken() {
+    const token = localStorage.getItem('token');
+    
+    // If no token at all, user needs to login
+    if (!token) {
+        return null;
+    }
+    
+    // If a refresh is in progress, wait for it
+    if (refreshPromise) {
+        await refreshPromise;
+        return localStorage.getItem('token');
+    }
+    
+    // Check if token needs refreshing - atomic check with lock
+    const needsRefresh = isTokenExpired();
+    const timeSinceLastRefresh = Date.now() - lastRefreshAttempt;
+    const refreshCooldown = 2000; // 2 second cooldown between refresh attempts
+    
+    if (needsRefresh && timeSinceLastRefresh > refreshCooldown && !refreshLock && !refreshPromise) {
+        // Acquire lock immediately to prevent race condition
+        refreshLock = true;
+        lastRefreshAttempt = Date.now();
+        
+        try {
+            console.log('[TOKEN] Token expired, refreshing...');
+            refreshPromise = (async () => {
+                try {
+                    return await refreshAccessToken();
+                } finally {
+                    refreshPromise = null;
+                }
+            })();
+            
+            // Wait for the refresh to complete
+            await refreshPromise;
+            
+        } finally {
+            refreshLock = false;
+        }
+        
+        return localStorage.getItem('token');
+    }
+    
+    return token;
+}
+
+// Wrapper for fetch to auto-refresh tokens on 401
+async function authenticatedFetch(url, options = {}) {
+    // Get valid token (will refresh if needed)
+    const token = await getValidAccessToken();
+    
+    if (!token) {
+        throw new Error('No valid token available');
+    }
+    
+    // Add auth header
+    const headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
+    const requestOptions = { ...options, headers };
+    
+    // Make the request
+    const response = await fetch(url, requestOptions);
+    
+    // If 401, try to refresh and retry once
+    if (response.status === 401) {
+        console.log('[TOKEN] Got 401, attempting token refresh...');
+        
+        // Start refresh if not in progress
+        if (!refreshPromise) {
+            refreshPromise = refreshAccessToken().finally(() => {
+                refreshPromise = null;
+            });
+        }
+        
+        // Wait for refresh to complete
+        const refreshed = await refreshPromise;
+        
+        if (refreshed) {
+            // Retry with new token
+            const newToken = localStorage.getItem('token');
+            const retryHeaders = { ...options.headers, 'Authorization': `Bearer ${newToken}` };
+            const retryOptions = { ...options, headers: retryHeaders };
+            return fetch(url, retryOptions);
+        } else {
+            // Refresh failed, clear everything
+            clearTokens();
+            document.getElementById('auth-container').style.display = 'block';
+            document.getElementById('feed-container').style.display = 'none';
+            showError('Session expired. Please sign in again.');
+        }
+    }
+    
+    return response;
+}
+
+// ============================================================================
+
 let feedRefreshInterval = null;
 
 function startPeriodicFeedRefresh() {
     if (feedRefreshInterval) clearInterval(feedRefreshInterval);
-    feedRefreshInterval = setInterval(() => {
+    feedRefreshInterval = setInterval(async () => {
         // Only refresh if user is still logged in
-        const token = localStorage.getItem('token');
+        const token = await getValidAccessToken();
         if (token) {
             showFeed(currentOffset, currentCategoryFilter);
         } else {
@@ -30,8 +215,8 @@ function stopPeriodicFeedRefresh() {
 }
 
 // Call this after login, after adding/deleting a category, or on page load
-document.addEventListener('DOMContentLoaded', function() {
-    let currentToken = localStorage.getItem('token');
+document.addEventListener('DOMContentLoaded', async function() {
+    const currentToken = await getValidAccessToken();
     if (currentToken) {
         showFeed();
         startPeriodicFeedRefresh();
@@ -81,7 +266,12 @@ async function login() {
         const data = await response.json();
         
         if (response.ok) {
-            localStorage.setItem('token', data.access_token);
+            // Store tokens with refresh token and expiry
+            storeTokens(data.access_token, data.refresh_token, data.expires_in);
+            
+            // Wait a moment to ensure tokens are stored before making API calls
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
             showFeed();
             startPeriodicFeedRefresh();
         } else {
@@ -142,7 +332,7 @@ async function signup() {
                 
                 if (loginResponse.ok) {
                     const loginData = await loginResponse.json();
-                    localStorage.setItem('token', loginData.access_token);
+                    storeTokens(loginData.access_token, loginData.refresh_token, loginData.expires_in);
                     showFeed();
                     startPeriodicFeedRefresh();
                 } else {
@@ -164,15 +354,17 @@ const FEED_LIMIT = 30;
 let currentCategoryFilter = null;
 
 async function showFeed(offset = 0, categoryFilter = null) {
-    const token = localStorage.getItem('token');
-    if (!token) return;
+    const token = await getValidAccessToken();
+    if (!token) {
+        document.getElementById('auth-container').style.display = 'block';
+        document.getElementById('feed-container').style.display = 'none';
+        return;
+    }
     currentOffset = offset;
     currentCategoryFilter = categoryFilter;
     try {
         // Fetch user info for header
-        let userResp = await fetch('/auth/me', {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        let userResp = await authenticatedFetch('/auth/me');
         let username = '';
         if (userResp.ok) {
             const userData = await userResp.json();
@@ -187,11 +379,7 @@ async function showFeed(offset = 0, categoryFilter = null) {
         if (categoryFilter) {
             url += `&category=${encodeURIComponent(categoryFilter)}`;
         }
-        const response = await fetch(url, {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        });
+        const response = await authenticatedFetch(url);
         if (response.ok) {
             const feedItems = await response.json();
             console.log('[DEBUG] Feed API returned:', feedItems.length, 'items');
@@ -210,7 +398,9 @@ async function showFeed(offset = 0, categoryFilter = null) {
             document.getElementById('auth-container').style.display = 'none';
             document.getElementById('feed-container').style.display = 'block';
         } else {
-            localStorage.removeItem('token');
+            clearTokens();
+            document.getElementById('auth-container').style.display = 'block';
+            document.getElementById('feed-container').style.display = 'none';
             showError('Session expired. Please sign in again.');
         }
     } catch (error) {
@@ -252,15 +442,8 @@ function updatePaginationControls(feedLength) {
 }
 
 async function loadCategories() {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-    
     try {
-        const response = await fetch('/user/categories', {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        });
+        const response = await authenticatedFetch('/user/categories');
         
         if (response.ok) {
             const categories = await response.json();
@@ -305,20 +488,16 @@ function displayCategories(categories) {
 }
 
 async function addCategory() {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-    
     const categoryName = document.getElementById('new-category').value.trim();
     if (!categoryName) {
         showError('Please enter a category name.');
         return;
     }
     try {
-        const response = await fetch('/user/categories', {
+        const response = await authenticatedFetch('/user/categories', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({ category_name: categoryName })
         });
@@ -340,13 +519,9 @@ async function addCategory() {
 }
 
 async function triggerFeedGeneration() {
-    const token = localStorage.getItem('token');
-    if (!token) return;
     try {
         // Get current user info to get user_id
-        const userResp = await fetch('/auth/me', {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const userResp = await authenticatedFetch('/auth/me');
         if (!userResp.ok) return;
         const userData = await userResp.json();
         
@@ -371,17 +546,12 @@ async function triggerFeedGeneration() {
 }
 
 async function deleteCategory(categoryId) {
-    const token = localStorage.getItem('token');
-    if (!token) return;
     if (!confirm('Are you sure you want to delete this category?')) {
         return;
     }
     try {
-        const response = await fetch(`/user/categories/${categoryId}`, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+        const response = await authenticatedFetch(`/user/categories/${categoryId}`, {
+            method: 'DELETE'
         });
         const data = await response.json();
         if (response.ok) {
@@ -595,7 +765,7 @@ function timeAgo(date) {
 }
 
 function logout() {
-    localStorage.removeItem('token');
+    clearTokens();
     document.getElementById('auth-container').style.display = 'block';
     document.getElementById('feed-container').style.display = 'none';
     document.getElementById('login-form').classList.add('active');
@@ -664,9 +834,6 @@ function showSuccess(message) {
 }
 
 async function refreshBriefings() {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-    
     // Show loading state
     const refreshBtn = document.getElementById('refresh-briefings-btn');
     const originalText = refreshBtn.textContent;
@@ -675,11 +842,8 @@ async function refreshBriefings() {
     
     try {
         // Trigger the ingestion
-        const response = await fetch('/api/ingestion/ingest/perplexity', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+        const response = await authenticatedFetch('/api/ingestion/ingest/perplexity', {
+            method: 'POST'
         });
         
         if (response.ok) {
@@ -711,11 +875,7 @@ async function pollTaskCompletion(taskId) {
     
     while (attempts < maxAttempts) {
         try {
-            const response = await fetch(`/api/ingestion/task/${taskId}`, {
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                }
-            });
+            const response = await authenticatedFetch(`/api/ingestion/task/${taskId}`);
             
             if (response.ok) {
                 const taskData = await response.json();
@@ -771,7 +931,7 @@ let aiSummaryCollapsed = false;
 
 async function loadAISummary() {
     console.log('loadAISummary called');
-    const token = localStorage.getItem('token');
+    const token = await getValidAccessToken();
     console.log('Token found:', !!token);
     if (!token) {
         console.log('No token, returning early');
@@ -786,9 +946,7 @@ async function loadAISummary() {
         
         // Try to get existing summary
         console.log('Fetching latest summary...');
-        const response = await fetch('/ai-summary/latest', {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
+        const response = await authenticatedFetch('/ai-summary/latest');
         console.log('Response status:', response.status);
         
         if (response.ok) {
@@ -815,7 +973,7 @@ async function loadAISummary() {
 }
 
 async function generateAISummary() {
-    const token = localStorage.getItem('token');
+    const token = await getValidAccessToken();
     if (!token) return;
 
     try {
@@ -825,10 +983,9 @@ async function generateAISummary() {
         document.getElementById('ai-summary-meta').style.display = 'none';
         document.getElementById('ai-summary-status').textContent = 'Generating...';
 
-        const response = await fetch('/ai-summary/generate-and-store', {
+        const response = await authenticatedFetch('/ai-summary/generate-and-store', {
             method: 'POST',
             headers: { 
-                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
             }
         });

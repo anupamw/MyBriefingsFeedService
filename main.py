@@ -42,7 +42,7 @@ templates = Jinja2Templates(directory="templates")
 # Security configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here-change-in-production")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30  # Short-lived for security
+ACCESS_TOKEN_EXPIRE_MINUTES = 2  # Short-lived for testing (2 minutes)
 REFRESH_TOKEN_EXPIRE_DAYS = 30    # Long-lived for convenience
 
 # Password hashing
